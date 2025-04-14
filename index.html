@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual YouTube Player</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        #player-container {
+            display: flex;
+            flex: 1;
+            flex-direction: row;
+            overflow: hidden;
+            position: relative;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .player-wrapper {
+            flex: 1;
+            margin: 0;
+            transition: left 0.5s ease-in-out;
+            position: absolute;
+            top: 20px;
+            height: calc(100% - 40px);
+            width: calc(50% - 20px);
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .player-wrapper:first-child {
+            left: 20px;
+            z-index: 1;
+        }
+        .player-wrapper:last-child {
+            left: calc(50% + 20px);
+            z-index: 0;
+        }
+        .player-wrapper iframe {
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+        }
+        #controls {
+            padding: 20px;
+            background-color: #333;
+            color: white;
+            text-align: center;
+        }
+        #video-url {
+            padding: 10px;
+            width: 300px;
+            margin-right: 15px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background-color: #444;
+            color: white;
+            font-size: 16px;
+        }
+        #video-url::placeholder {
+            color: #888;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #5cb85c;
+            color: white;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        .speed-meter {
+            display: inline-block;
+            margin: 15px 20px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        #controls > div {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="player-container">
+        <div id="player1-wrapper" class="player-wrapper">
+            <div id="player1"></div>
+        </div>
+        <div id="player2-wrapper" class="player-wrapper">
+            <div id="player2"></div>
+        </div>
+    </div>
+    <div id="controls">
+        <input type="text" id="video-url" placeholder="Insira o link do YouTube para o segundo vídeo">
+        <button onclick="loadSecondVideo()">Carregar Vídeo</button>
+        <div>
+            <span class="speed-meter">Player 1 Speed: <span id="speed1">1.0</span>x</span>
+            <span class="speed-meter">Player 2 Speed: <span id="speed2">1.0</span>x</span>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player1, player2;
+        let currentVideo1Id = 'r-mUL66HUVI';
+        let currentVideo2Id = 'dQw4w9WgXcQ';
+        let isPlayer1OnLeft = true;
+        let player1Time = 0;
+        let player2Time = 0;
+        let switchInterval;
+        const leftPosition = '20px';
+        const rightPosition = 'calc(50% + 20px)';
+        let playersReadyCount = 0;
+        let canStartSwitching = false;
+
+        function onYouTubeIframeAPIReady() {
+            player1 = new YT.Player('player1', {
+                height: '100%',
+                width: '100%',
+                videoId: currentVideo1Id,
+                playerVars: { 'playsinline': 1, 'mute': 0 }, // Removido autoplay do player 1
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange1 }
+            });
+
+            player2 = new YT.Player('player2', {
+                height: '100%',
+                width: '100%',
+                videoId: currentVideo2Id,
+                playerVars: { 'playsinline': 1, 'autoplay': 1, 'mute': 0 },
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange2 }
+            });
+        }
+
+        function onPlayerReady(event) {
+            playersReadyCount++;
+            if (playersReadyCount === 2) {
+                canStartSwitching = true;
+                updateSpeedMeters();
+            }
+        }
+
+        function onPlayerStateChange1(event) {
+            if (event.data === YT.PlayerState.PLAYING && !player1.timeUpdateInterval) {
+                player1.timeUpdateInterval = setInterval(() => {
+                    if (player1.getPlayerState() === YT.PlayerState.PLAYING) { player1Time = player1.getCurrentTime(); }
+                }, 1000);
+            } else if (event.data === YT.PlayerState.PAUSED) { clearInterval(player1.timeUpdateInterval); player1.timeUpdateInterval = null; }
+        }
+
+        function onPlayerStateChange2(event) {
+            if (event.data === YT.PlayerState.PLAYING && !player2.timeUpdateInterval) {
+                player2.timeUpdateInterval = setInterval(() => {
+                    if (player2.getPlayerState() === YT.PlayerState.PLAYING) { player2Time = player2.getCurrentTime(); }
+                }, 1000);
+            } else if (event.data === YT.PlayerState.PAUSED) { clearInterval(player2.timeUpdateInterval); player2.timeUpdateInterval = null; }
+        }
+
+        function updateSpeedMeters() {
+            setInterval(() => {
+                if (player1 && player1.getPlaybackRate) { document.getElementById('speed1').textContent = player1.getPlaybackRate().toFixed(1); }
+                if (player2 && player2.getPlaybackRate) { document.getElementById('speed2').textContent = player2.getPlaybackRate().toFixed(1); }
+            }, 1000);
+        }
+
+        function swapVideos() {
+            const player1Wrapper = document.getElementById('player1-wrapper');
+            const player2Wrapper = document.getElementById('player2-wrapper');
+
+            if (isPlayer1OnLeft) {
+                player1Wrapper.style.left = rightPosition;
+                player2Wrapper.style.left = leftPosition;
+            } else {
+                player1Wrapper.style.left = leftPosition;
+                player2Wrapper.style.left = rightPosition;
+            }
+
+            isPlayer1OnLeft = !isPlayer1OnLeft;
+
+            player1Wrapper.style.zIndex = isPlayer1OnLeft ? '1' : '0';
+            player2Wrapper.style.zIndex = isPlayer1OnLeft ? '0' : '1';
+        }
+
+        function startVideoSwitching() {
+            clearInterval(switchInterval);
+            switchInterval = setInterval(swapVideos, 15000);
+        }
+
+        function startSpeedSwitching() {
+            setInterval(() => { if (player1 && player1.setPlaybackRate) { player1.setPlaybackRate(Math.random() < 0.5 ? 1 : 2); } }, 10000);
+            setInterval(() => { if (player2 && player2.setPlaybackRate) { player2.setPlaybackRate(Math.random() < 0.5 ? 1 : 2); } }, 10000);
+        }
+
+        function loadSecondVideo() {
+            const url = document.getElementById('video-url').value.trim();
+            const videoId = extractVideoId(url);
+            if (videoId) {
+                currentVideo2Id = videoId;
+                if (player2 && player2.loadVideoById) {
+                    player2.loadVideoById({ videoId: videoId, startSeconds: 0 });
+                    player2Time = 0;
+                    if (player1 && player1.playVideo) {
+                        player1.playVideo(); // Inicia a reprodução do player 1
+                    }
+                    if (canStartSwitching) {
+                        startVideoSwitching();
+                        startSpeedSwitching();
+                    }
+                }
+                document.getElementById('video-url').value = '';
+            } else { alert('Link do YouTube inválido. Use um formato como https://www.youtube.com/watch?v=VIDEO_ID ou https://youtu.be/VIDEO_ID'); }
+        }
+
+        function extractVideoId(url) {
+            const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regExp);
+            return match ? match[1] : null;
+        }
+    </script>
+</body>
+</html>
