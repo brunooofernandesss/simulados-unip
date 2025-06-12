@@ -1,243 +1,606 @@
-<style>
-   /* CSS (adaptado do popup.css e styles.css da extensão) */
-   body {
-       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-       margin: 0;
-       padding: 20px;
-       background-color: #f0f2f5;
-       color: #333;
-       display: flex;
-       justify-content: center;
-       align-items: flex-start; /* Align to top */
-       min-height: 100vh;
-   }
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor Dinâmico RSVP Online</title>
+    <style>
+        /* CSS (adaptado do popup.css e styles.css da extensão) */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+        }
 
-   .container {
-       background-color: white;
-       padding: 30px;
-       border-radius: 12px;
-       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-       max-width: 800px;
-       width: 100%;
-       text-align: center;
-   }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
 
-   h1, h3 {
-       color: #2c3e50;
-       margin-bottom: 20px;
-   }
+        h1, h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
 
-   textarea {
-       width: calc(100% - 22px); /* Account for padding and border */
-       min-height: 180px;
-       margin-bottom: 15px;
-       padding: 10px;
-       border: 1px solid #ccc;
-       border-radius: 8px;
-       resize: vertical;
-       font-size: 1em;
-       line-height: 1.5;
-       box-sizing: border-box; /* Include padding and border in width */
-   }
+        textarea {
+            width: calc(100% - 22px); /* Account for padding and border */
+            min-height: 180px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            resize: vertical;
+            font-size: 1em;
+            line-height: 1.5;
+            box-sizing: border-box; /* Include padding and border in width */
+        }
 
-   input type="file"] {
-       margin-bottom: 20px;
-       border: 1px solid #ccc;
-       padding: 8px;
-       border-radius: 8px;
-       background-color: #e9ecef;
-       width: calc(100% - 18px);
-       box-sizing: border-box;
-   }
+        input[type="file"] {
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 8px;
+            border-radius: 8px;
+            background-color: #e9ecef;
+            width: calc(100% - 18px);
+            box-sizing: border-box;
+        }
 
-   button {
-       padding: 12px 25px;
-       margin: 8px;
-       cursor: pointer;
-       border-radius: 8px;
-       border: none;
-       background-color: #007bff;
-       color: white;
-       font-size: 1.05em;
-       transition: background-color 0.3s ease, transform 0.2s ease;
-   }
+        button {
+            padding: 12px 25px;
+            margin: 8px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            font-size: 1.05em;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
 
-   button:hover:not(:disabled) {
-       background-color: #0056b3;
-       transform: translateY(-2px);
-   }
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
 
-   button:active:not(:disabled) {
-       transform: translateY(0);
-   }
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
 
-   button:disabled {
-       background-color: #cccccc;
-       cursor: not-allowed;
-       opacity: 0.7;
-   }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
 
-   button#iniciarParar.playing {
-       background-color: #28a745; /* Green for playing state */
-   }
-   button#iniciarParar.playing:hover {
-       background-color: #218838;
-   }
+        button#iniciarParar.playing {
+            background-color: #28a745; /* Green for playing state */
+        }
+        button#iniciarParar.playing:hover {
+            background-color: #218838;
+        }
 
-   button#pausarRetomar.paused {
-       background-color: #ffc107; /* Yellow for paused state */
-       color: #333;
-   }
-   button#pausarRetomar.paused:hover {
-       background-color: #e0a800;
-   }
+        button#pausarRetomar.paused {
+            background-color: #ffc107; /* Yellow for paused state */
+            color: #333;
+        }
+        button#pausarRetomar.paused:hover {
+            background-color: #e0a800;
+        }
 
-   .controls {
-       display: flex;
-       flex-wrap: wrap;
-       gap: 15px;
-       margin-bottom: 30px;
-       justify-content: center;
-       align-items: center;
-   }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            justify-content: center;
+            align-items: center;
+        }
 
-   .control-group {
-       flex: 1 1 auto; /* Allow items to grow and shrink */
-       min-width: 200px; /* Minimum width for each group */
-       text-align: left;
-   }
+        .control-group {
+            flex: 1 1 auto; /* Allow items to grow and shrink */
+            min-width: 200px; /* Minimum width for each group */
+            text-align: left;
+        }
 
-   label {
-       display: block;
-       margin-bottom: 8px;
-       font-weight: bold;
-       color: #555;
-       font-size: 0.95em;
-   }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+            font-size: 0.95em;
+        }
 
-   input type="range"] {
-       width: 100%;
-       -webkit-appearance: none;
-       height: 8px;
-       background: #d3d3d3;
-       outline: none;
-       opacity: 0.7;
-       transition: opacity .2s;
-       border-radius: 4px;
-   }
+        input[type="range"] {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 8px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+            border-radius: 4px;
+        }
 
-   input type="range"]::-webkit-slider-thumb {
-       -webkit-appearance: none;
-       appearance: none;
-       width: 20px;
-       height: 20px;
-       border-radius: 50%;
-       background: #007bff;
-       cursor: pointer;
-       transition: background-color 0.3s ease;
-   }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #007bff;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
 
-   input type="range"]::-webkit-slider-thumb:hover {
-       background: #0056b3;
-   }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #0056b3;
+        }
 
-   input type="number"] {
-       padding: 8px;
-       border: 1px solid #ccc;
-       border-radius: 8px;
-       width: calc(100% - 18px); /* Account for padding and border */
-       box-sizing: border-box;
-       font-size: 1em;
-   }
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            width: calc(100% - 18px); /* Account for padding and border */
+            box-sizing: border-box;
+            font-size: 1em;
+        }
 
-   #rsvp-display {
-       font-size: 48px; /* Larger base font for better visibility */
-       font-weight: bold;
-       text-align: center;
-       background-color: #2c3e50; /* Dark background */
-       color: white;
-       padding: 30px 15px; /* Reduced padding for smaller screens */
-       border-radius: 12px;
-       min-height: 120px; /* Reduced min-height */
-       display: flex;
-       justify-content: center;
-       align-items: center;
-       margin-top: 30px;
-       white-space: nowrap; /* Impede a quebra de linha */
-       overflow: hidden; /* Esconde o texto que não cabe */
-       text-overflow: ellipsis; /* Mostra "..." se o texto for cortado */
-       line-height: 1.2; /* Ajuste na altura da linha */
-       transition: font-size 0.1s ease; /* Suaviza as mudanças de tamanho da fonte */
+        #rsvp-display {
+            font-size: 48px; /* Larger base font for better visibility */
+            font-weight: bold;
+            text-align: center;
+            background-color: #2c3e50; /* Dark background */
+            color: white;
+            padding: 30px 15px; /* Reduced padding for smaller screens */
+            border-radius: 12px;
+            min-height: 120px; /* Reduced min-height */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 30px;
+            white-space: nowrap; /* Impede a quebra de linha */
+            overflow: hidden; /* Esconde o texto que não cabe */
+            text-overflow: ellipsis; /* Mostra "..." se o texto for cortado */
+            line-height: 1.2; /* Ajuste na altura da linha */
+            transition: font-size 0.1s ease; /* Suaviza as mudanças de tamanho da fonte */
 
-       /* Tentativa de ajuste dinâmico da fonte */
-       --num-palavras-display: 1; /* Valor inicial */
-       font-size: clamp(20px, calc(10vw + 10px / var(--num-palavras-display)), 60px); /* Ajuste com vw e clamp */
-   }
+            /* Tentativa de ajuste dinâmico da fonte */
+            --num-palavras-display: 1; /* Valor inicial */
+            font-size: clamp(20px, calc(10vw + 10px / var(--num-palavras-display)), 60px); /* Ajuste com vw e clamp */
+        }
 
-   #status-message {
-       text-align: center;
-       margin-top: 20px;
-       padding: 10px;
-       border-radius: 8px;
-       font-weight: bold;
-       min-height: 20px; /* Prevent layout shift */
-   }
-   .status-success { color: #28a745; background-color: #d4edda; border: 1px solid #c3e6cb; }
-   .status-error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; }
+        #status-message {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            min-height: 20px; /* Prevent layout shift */
+        }
+        .status-success { color: #28a745; background-color: #d4edda; border: 1px solid #c3e6cb; }
+        .status-error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; }
 
-   /* Media query para telas menores (celulares) */
-   @media (max-width: 600px) {
-       .container {
-           padding: 20px;
-           border-radius: 8px;
-       }
-       h1 {
-           font-size: 1.5em;
-           margin-bottom: 15px;
-       }
-       h3 {
-           font-size: 1.1em;
-           margin-bottom: 15px;
-       }
-       textarea {
-           min-height: 120px;
-           margin-bottom: 10px;
-           font-size: 0.9em;
-       }
-       input type="file"] {
-           margin-bottom: 15px;
-           font-size: 0.9em;
-       }
-       button {
-           padding: 10px 20px;
-           margin: 5px;
-           font-size: 0.95em;
-       }
-       .controls {
-           gap: 10px;
-           margin-bottom: 20px;
-       }
-       .control-group {
-           min-width: auto;
-           width: 45%; /* Ajusta a largura dos controles em telas menores */
-       }
-       label {
-           font-size: 0.85em;
-           margin-bottom: 5px;
-       }
-       input type="number"],
-       input type="range"] {
-           font-size: 0.9em;
-       }
-       #rsvp-display {
-           padding: 20px 10px;
-           min-height: 90px;
-           font-size: clamp(16px, calc(8vw + 8px / var(--num-palavras-display)), 40px); /* Ajuste para telas menores */
-       }
-       #status-message {
-           font-size: 0.9em;
-           margin-top: 10px;
-           padding: 8px;
-       }
-   }
-</style>
+        /* Media query para telas menores (celulares) */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                border-radius: 8px;
+            }
+            h1 {
+                font-size: 1.5em;
+                margin-bottom: 15px;
+            }
+            h3 {
+                font-size: 1.1em;
+                margin-bottom: 15px;
+            }
+            textarea {
+                min-height: 120px;
+                margin-bottom: 10px;
+                font-size: 0.9em;
+            }
+            input[type="file"] {
+                margin-bottom: 15px;
+                font-size: 0.9em;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                font-size: 0.95em;
+            }
+            .controls {
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            .control-group {
+                min-width: auto;
+                width: 45%; /* Ajusta a largura dos controles em telas menores */
+            }
+            label {
+                font-size: 0.85em;
+                margin-bottom: 5px;
+            }
+            input[type="number"],
+            input[type="range"] {
+                font-size: 0.9em;
+            }
+            #rsvp-display {
+                padding: 20px 10px;
+                min-height: 90px;
+                font-size: clamp(16px, calc(8vw + 8px / var(--num-palavras-display)), 40px); /* Ajuste para telas menores */
+            }
+            #status-message {
+                font-size: 0.9em;
+                margin-top: 10px;
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Leitor Dinâmico RSVP Online</h1>
+        <h3>Cole seu texto ou carregue um PDF</h3>
+
+        <textarea id="text-input" placeholder="Cole o texto que você quer ler aqui..."></textarea>
+        <input type="file" id="pdf-file-input" accept=".pdf">
+
+        <div class="controls">
+            <button id="iniciarParar">Iniciar Leitura</button>
+            <button id="pausarRetomar" disabled>Pausar</button>
+
+            <div class="control-group">
+                <label for="velocidade">Velocidade (PPM): <span id="velocidadeValor">300</span></label>
+                <input type="number" id="velocidade" min="1" value="300" step="10">
+            </div>
+
+            <div class="control-group">
+                <label for="numPalavras">Número de Palavras: <span id="numPalavrasValor">1</span></label>
+                <input type="range" id="numPalavras" min="1" max="10" value="1" step="1">
+            </div>
+        </div>
+
+        <div id="rsvp-display"></div>
+        <div id="status-message"></div>
+    </div>
+
+    <script type="module">
+        // Importar getDocument e GlobalWorkerOptions diretamente de pdf.mjs
+        // ***** ATENÇÃO: OS CAMINHOS AGORA SÃO RELATIVOS À MESMA PASTA DO index2.html *****
+        try {
+            console.log("Tentando importar getDocument e GlobalWorkerOptions de ./pdf.mjs");
+            const { getDocument, GlobalWorkerOptions } = await import('./pdf.mjs'); // Caminho atualizado
+            console.log("Importação de pdf.mjs bem-sucedida.");
+
+            // Configure o workerSrc para o pdf.worker.mjs
+            console.log("Configurando GlobalWorkerOptions.workerSrc para ./pdf.worker.mjs");
+            GlobalWorkerOptions.workerSrc = './pdf.worker.mjs'; // Caminho atualizado
+            console.log("workerSrc configurado.");
+
+            // --- Variáveis Globais ---
+            let state = {
+                lendo: false,
+                pausado: false,
+                velocidade: 300,
+                numPalavras: 1,
+                elementosConteudo: [], // Array de strings de texto (para HTML ou páginas de PDF)
+                indiceElementoAtual: 0,
+                unidadesTexto: [],
+                indiceUnidadeAtual: 0,
+                intervaloLeitura: null,
+                pdfDoc: null, // Referência ao objeto PDFDocumentProxy quando um PDF é carregado
+            };
+
+            // --- Elementos do DOM ---
+            const textInput = document.getElementById("text-input");
+            const pdfFileInput = document.getElementById("pdf-file-input");
+            const iniciarPararBtn = document.getElementById("iniciarParar");
+            const pausarRetomarBtn = document.getElementById("pausarRetomar");
+            const velocidadeInput = document.getElementById("velocidade");
+            const velocidadeValorSpan = document.getElementById("velocidadeValor");
+            const numPalavrasSlider = document.getElementById("numPalavras");
+            const numPalavrasValorSpan = document.getElementById("numPalavrasValor");
+            const rsvpDisplay = document.getElementById("rsvp-display");
+            const statusMessageDiv = document.getElementById("status-message");
+
+            // --- Funções de Utilitário ---
+            function setStatusMessage(message, isError = false) {
+                console.log(`Status: ${message} (Erro: ${isError})`);
+                statusMessageDiv.textContent = message;
+                statusMessageDiv.className = isError ? "status-error" : "status-success";
+                setTimeout(() => { statusMessageDiv.textContent = ""; statusMessageDiv.className = ""; }, 5000);
+            }
+
+            function exibirPalavrasRSVP(palavras) {
+                if (rsvpDisplay) {
+                    const texto = palavras.join(" ");
+                    rsvpDisplay.textContent = texto;
+                    rsvpDisplay.style.setProperty('--num-palavras-display', palavras.length);
+                }
+            }
+
+            function calcularTempoEspera(textoUnidade) {
+                const numPalavras = textoUnidade.split(/\s+/).filter(p => p.length > 0).length;
+                if (numPalavras === 0) return 150;
+                const tempo = (numPalavras / (state.velocidade / 60)) * 1000;
+                return Math.max(tempo, 150);
+            }
+
+            function limparEstadoLeitura(clearPdfDoc = false) { // Parâmetro para decidir se limpa o PDF
+                console.log("Limpando estado de leitura...");
+                state.lendo = false;
+                state.pausado = false;
+                clearTimeout(state.intervaloLeitura);
+                state.intervaloLeitura = null;
+                state.indiceElementoAtual = 0;
+                state.indiceUnidadeAtual = 0;
+                state.unidadesTexto = [];
+                state.elementosConteudo = [];
+                
+                if (clearPdfDoc) { // Só limpa state.pdfDoc se clearPdfDoc for true
+                    state.pdfDoc = null;
+                    pdfFileInput.value = ''; // Limpa o nome do arquivo selecionado no input
+                    console.log("state.pdfDoc foi limpo.");
+                }
+                
+                rsvpDisplay.textContent = "";
+                iniciarPararBtn.textContent = "Iniciar Leitura";
+                iniciarPararBtn.classList.remove('playing');
+                pausarRetomarBtn.textContent = "Pausar";
+                pausarRetomarBtn.classList.remove('paused');
+                pausarRetomarBtn.disabled = true;
+                textInput.disabled = false;
+                pdfFileInput.disabled = false;
+                console.log("Estado limpo.");
+            }
+
+            function prepararProximoConteudo() {
+                if (state.indiceElementoAtual >= state.elementosConteudo.length) {
+                    console.log("Fim dos elementos de conteúdo.");
+                    return false;
+                }
+
+                const textoParaProcessar = state.elementosConteudo[state.indiceElementoAtual];
+                console.log(`prepararProximoConteudo: Processando elemento ${state.indiceElementoAtual}. Texto (primeiros 50 chars):`, textoParaProcessar ? textoParaProcessar.substring(0, 50) + "..." : "Vazio");
+                
+                state.unidadesTexto = textoParaProcessar.split(/\s+/).filter(p => p.length > 0);
+                state.indiceUnidadeAtual = 0;
+
+                if (state.unidadesTexto.length === 0) {
+                    console.log("Unidade de conteúdo vazia. Pulando para o próximo elemento.");
+                    state.indiceElementoAtual++;
+                    return prepararProximoConteudo(); // Tenta o próximo elemento
+                }
+                console.log(`Conteúdo preparado com ${state.unidadesTexto.length} unidades (palavras/grupos de palavras).`);
+                return true;
+            }
+
+            function avancarLeitura() {
+                if (!state.lendo || state.pausado) return;
+
+                if (state.indiceUnidadeAtual >= state.unidadesTexto.length) {
+                    state.indiceElementoAtual++;
+                    console.log(`avancarLeitura: Fim das unidades da página/elemento atual. Indo para o próximo elemento: ${state.indiceElementoAtual}`);
+                    if (!prepararProximoConteudo()) {
+                        console.log("Leitura concluída.");
+                        pararLeitura();
+                        setStatusMessage("Leitura concluída!");
+                        return;
+                    }
+                }
+
+                const fimChunk = Math.min(state.indiceUnidadeAtual + state.numPalavras, state.unidadesTexto.length);
+                const palavras = state.unidadesTexto.slice(state.indiceUnidadeAtual, fimChunk);
+                const unidadeAtual = palavras.join(" ");
+
+                exibirPalavrasRSVP(palavras);
+                console.log(`Exibindo: "${unidadeAtual}" (Unidade ${state.indiceUnidadeAtual + 1}/${state.unidadesTexto.length}, Elemento ${state.indiceElementoAtual + 1}/${state.elementosConteudo.length})`);
+
+                const tempoEspera = calcularTempoEspera(unidadeAtual);
+                state.indiceUnidadeAtual = fimChunk;
+                state.intervaloLeitura = setTimeout(avancarLeitura, tempoEspera);
+            }
+
+            // --- Lógica de Controle ---
+            async function iniciarLeitura() {
+                // AQUI FOI AJUSTADO: Não passa 'true' para limparEstadoLeitura()
+                limparEstadoLeitura(); // Isto manterá state.pdfDoc se já estiver carregado
+
+                let contentToRead = "";
+                if (textInput.value.trim()) {
+                    contentToRead = textInput.value.trim();
+                    state.elementosConteudo = [contentToRead]; // Trata como um único bloco de texto
+                    console.log("Modo: Texto Colado. Conteúdo: ", contentToRead.substring(0, 100) + "...");
+                } else if (state.pdfDoc) {
+                    setStatusMessage("Extraindo texto do PDF...", false);
+                    console.log("Modo: PDF Carregado. Extraindo texto...");
+                    const allText = [];
+                    try {
+                        for (let i = 1; i <= state.pdfDoc.numPages; i++) {
+                            console.log(`Extraindo texto da página ${i}/${state.pdfDoc.numPages}...`);
+                            const page = await state.pdfDoc.getPage(i);
+                            const textContent = await page.getTextContent();
+                            // Filtrar itens vazios antes de mapear e juntar
+                            const pageText = textContent.items
+                                .filter(item => item.str.trim().length > 0) // Garante que há texto
+                                .map(item => item.str)
+                                .join(' ')
+                                .replace(/\s+/g, ' ') // Substitui múltiplos espaços por um único
+                                .trim();
+                            
+                            allText.push(pageText);
+                            console.log(`  -> Página ${i} texto extraído (primeiros 100 chars):`, pageText.substring(0, 100), ` (Tamanho: ${pageText.length})`);
+                            if (pageText.length === 0) {
+                                console.warn(`  -> Página ${i} extraída vazia ou apenas espaços.`);
+                            }
+                        }
+                        state.elementosConteudo = allText;
+                        console.log(`Total de elementos de conteúdo (páginas): ${allText.length}`);
+                        console.log(`Texto extraído do PDF: ${state.pdfDoc.numPages} páginas. state.elementosConteudo[0] (primeiros 100 chars):`, state.elementosConteudo[0] ? state.elementosConteudo[0].substring(0, 100) : "Vazio ou não existe");
+                    } catch (pdfExtractError) {
+                        console.error("Erro durante a extração de texto do PDF (pdf.js getTextContent):", pdfExtractError);
+                        setStatusMessage(`Erro ao extrair texto do PDF: ${pdfExtractError.message}`, true);
+                        state.pdfDoc = null; // Em caso de erro na extração, limpa o PDF carregado
+                        return; // Stop execution if PDF extraction fails
+                    }
+                } else {
+                    setStatusMessage("Por favor, cole algum texto ou carregue um arquivo PDF.", true);
+                    return;
+                }
+
+                if (state.elementosConteudo.length === 0 || state.elementosConteudo.every(text => text.trim() === '')) {
+                    setStatusMessage("Nenhum conteúdo válido para ler foi encontrado.", true);
+                    console.error("state.elementosConteudo está vazio ou contém apenas strings vazias.");
+                    limparEstadoLeitura(true); // Se não há conteúdo válido, reinicia tudo, incluindo o PDF
+                    return;
+                }
+
+                if (!prepararProximoConteudo()) {
+                    setStatusMessage("Não foi possível preparar o texto para leitura. Conteúdo pode estar vazio.", true);
+                    console.error("prepararProximoConteudo retornou false, apesar de haver elementosConteudo.");
+                    limparEstadoLeitura(true); // Se não consegue preparar, reinicia tudo
+                    return;
+                }
+
+                state.lendo = true;
+                state.pausado = false;
+                iniciarPararBtn.textContent = "Parar Leitura";
+                iniciarPararBtn.classList.add('playing');
+                pausarRetomarBtn.disabled = false;
+                pausarRetomarBtn.textContent = "Pausar";
+                pausarRetomarBtn.classList.remove('paused');
+                textInput.disabled = true;
+                pdfFileInput.disabled = true;
+                
+                avancarLeitura();
+                setStatusMessage("Leitura iniciada!");
+            }
+
+            function pararLeitura() {
+                if (!state.lendo) return;
+                limparEstadoLeitura(true); // Ao parar, limpa também o PDF para um novo início
+                setStatusMessage("Leitura parada.");
+            }
+
+            function pausarRetomarLeitura() {
+                if (!state.lendo) return;
+                state.pausado = !state.pausado;
+                if (state.pausado) {
+                    clearTimeout(state.intervaloLeitura);
+                    pausarRetomarBtn.textContent = "Retomar";
+                    pausarRetomarBtn.classList.add('paused');
+                    setStatusMessage("Leitura pausada.");
+                } else {
+                    avancarLeitura();
+                    pausarRetomarBtn.textContent = "Pausar";
+                    pausarRetomarBtn.classList.remove('paused');
+                    setStatusMessage("Leitura retomada.");
+                }
+            }
+
+            function atualizarConfiguracoes() {
+                state.velocidade = parseInt(velocidadeInput.value);
+                state.numPalavras = parseInt(numPalavrasSlider.value);
+                velocidadeValorSpan.textContent = state.velocidade;
+                numPalavrasValorSpan.textContent = state.numPalavras;
+                rsvpDisplay.style.setProperty('--num-palavras-display', state.numPalavras);
+
+                if (state.lendo && !state.pausado) {
+                    clearTimeout(state.intervaloLeitura);
+                    avancarLeitura();
+                }
+                localStorage.setItem('rsvpVelocidade', state.velocidade);
+                localStorage.setItem('rsvpNumPalavras', state.numPalavras);
+            }
+
+            // --- Event Listeners ---
+            iniciarPararBtn.addEventListener("click", () => {
+                if (state.lendo) {
+                    pararLeitura();
+                } else {
+                    iniciarLeitura();
+                }
+            });
+
+            pausarRetomarBtn.addEventListener("click", pausarRetomarLeitura);
+
+            velocidadeInput.addEventListener("input", atualizarConfiguracoes);
+            numPalavrasSlider.addEventListener("input", atualizarConfiguracoes);
+            
+            pdfFileInput.addEventListener("change", async (event) => {
+                const file = event.target.files[0];
+                if (file && file.type === "application/pdf") {
+                    limparEstadoLeitura(true); // Limpa tudo, incluindo PDF anterior, ao carregar um novo
+                    setStatusMessage("Carregando PDF...", false);
+                    textInput.value = ""; // Limpa a área de texto se um PDF for carregado
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        state.pdfDoc = await getDocument(arrayBuffer).promise;
+                        // Use o título do documento se disponível, senão o nome do arquivo
+                        const pdfMetadata = await state.pdfDoc.getMetadata();
+                        const pdfTitle = pdfMetadata.info.Title || file.name;
+                        setStatusMessage(`PDF "${pdfTitle}" carregado. ${state.pdfDoc.numPages} páginas. Clique em 'Iniciar Leitura' para começar.`, false);
+                        console.log("PDF carregado, informações:", pdfMetadata.info);
+                    } catch (error) {
+                        console.error("Erro ao carregar PDF (pdf.js getDocument):", error);
+                        setStatusMessage(`Erro ao carregar PDF: ${error.message}`, true);
+                        state.pdfDoc = null;
+                    }
+                } else if (file) {
+                    setStatusMessage("Por favor, selecione um arquivo PDF válido.", true);
+                    limparEstadoLeitura(true); // Limpa o estado se um arquivo não PDF foi selecionado
+                }
+            });
+
+            // NOVO: Limpa o estado PDF se o usuário começar a digitar texto
+            textInput.addEventListener("input", () => {
+                if (textInput.value.trim().length > 0) {
+                    // Se o usuário digitou texto, assume que ele quer usar o texto e não o PDF
+                    limparEstadoLeitura(true); 
+                }
+            });
+
+            // --- Inicialização ---
+            function init() {
+                console.log("Inicializando site...");
+                const savedVelocidade = localStorage.getItem('rsvpVelocidade');
+                const savedNumPalavras = localStorage.getItem('rsvpNumPalavras');
+
+                if (savedVelocidade) {
+                    state.velocidade = parseInt(savedVelocidade);
+                    velocidadeInput.value = state.velocidade;
+                }
+                if (savedNumPalavras) {
+                    state.numPalavras = parseInt(savedNumPalavras);
+                    numPalavrasSlider.value = state.numPalavras;
+                }
+                atualizarConfiguracoes();
+                limparEstadoLeitura(true); // No início, limpa tudo, incluindo PDF
+                console.log("Site inicializado com configurações:", state.velocidade, state.numPalavras);
+            }
+
+            init();
+
+        } catch (initialImportError) {
+            console.error("Erro fatal ao importar módulos PDF.js: ", initialImportError);
+            document.getElementById('status-message').textContent = "Erro crítico ao carregar a funcionalidade PDF. Verifique o console e os arquivos pdf.js.";
+            document.getElementById('status-message').className = "status-error";
+            // Desabilitar botões se a importação falhar
+            document.getElementById("iniciarParar").disabled = true;
+            document.getElementById("pausarRetomar").disabled = true;
+            document.getElementById("pdf-file-input").disabled = true;
+        }
+    </script>
+</body>
+</html>
