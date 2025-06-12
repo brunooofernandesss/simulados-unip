@@ -310,17 +310,17 @@
                 }
 
                 const textoParaProcessar = state.elementosConteudo[state.indiceElementoAtual];
-                console.log("Texto a processar para a próxima unidade:", textoParaProcessar ? textoParaProcessar.substring(0, 50) + "..." : "Vazio");
+                console.log(`prepararProximoConteudo: Processando elemento ${state.indiceElementoAtual}. Texto (primeiros 50 chars):`, textoParaProcessar ? textoParaProcessar.substring(0, 50) + "..." : "Vazio");
                 
                 state.unidadesTexto = textoParaProcessar.split(/\s+/).filter(p => p.length > 0);
                 state.indiceUnidadeAtual = 0;
 
                 if (state.unidadesTexto.length === 0) {
-                    console.log("Unidade de conteúdo vazia. Pulando.");
+                    console.log("Unidade de conteúdo vazia. Pulando para o próximo elemento.");
                     state.indiceElementoAtual++;
-                    return prepararProximoConteudo();
+                    return prepararProximoConteudo(); // Tenta o próximo elemento
                 }
-                console.log(`Conteúdo preparado com ${state.unidadesTexto.length} unidades.`);
+                console.log(`Conteúdo preparado com ${state.unidadesTexto.length} unidades (palavras/grupos de palavras).`);
                 return true;
             }
 
@@ -329,6 +329,7 @@
 
                 if (state.indiceUnidadeAtual >= state.unidadesTexto.length) {
                     state.indiceElementoAtual++;
+                    console.log(`avancarLeitura: Fim das unidades da página/elemento atual. Indo para o próximo elemento: ${state.indiceElementoAtual}`);
                     if (!prepararProximoConteudo()) {
                         console.log("Leitura concluída.");
                         pararLeitura();
@@ -342,6 +343,7 @@
                 const unidadeAtual = palavras.join(" ");
 
                 exibirPalavrasRSVP(palavras);
+                console.log(`Exibindo: "${unidadeAtual}" (Unidade ${state.indiceUnidadeAtual + 1}/${state.unidadesTexto.length}, Elemento ${state.indiceElementoAtual + 1}/${state.elementosConteudo.length})`);
 
                 const tempoEspera = calcularTempoEspera(unidadeAtual);
                 state.indiceUnidadeAtual = fimChunk;
@@ -361,22 +363,35 @@
                 if (textInput.value.trim()) {
                     contentToRead = textInput.value.trim();
                     state.elementosConteudo = [contentToRead]; // Trata como um único bloco de texto
-                    console.log("Modo: Texto Colado.");
+                    console.log("Modo: Texto Colado. Conteúdo: ", contentToRead.substring(0, 100) + "...");
                 } else if (state.pdfDoc) {
                     setStatusMessage("Extraindo texto do PDF...", false);
                     console.log("Modo: PDF Carregado. Extraindo texto...");
                     const allText = [];
                     try {
                         for (let i = 1; i <= state.pdfDoc.numPages; i++) {
+                            console.log(`Extraindo texto da página ${i}/${state.pdfDoc.numPages}...`);
                             const page = await state.pdfDoc.getPage(i);
                             const textContent = await page.getTextContent();
-                            const pageText = textContent.items.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim();
+                            // Filtrar itens vazios antes de mapear e juntar
+                            const pageText = textContent.items
+                                .filter(item => item.str.trim().length > 0) // Garante que há texto
+                                .map(item => item.str)
+                                .join(' ')
+                                .replace(/\s+/g, ' ') // Substitui múltiplos espaços por um único
+                                .trim();
+                            
                             allText.push(pageText);
+                            console.log(`  -> Página ${i} texto extraído (primeiros 100 chars):`, pageText.substring(0, 100), ` (Tamanho: ${pageText.length})`);
+                            if (pageText.length === 0) {
+                                console.warn(`  -> Página ${i} extraída vazia ou apenas espaços.`);
+                            }
                         }
                         state.elementosConteudo = allText;
-                        console.log(`Texto extraído do PDF: ${state.pdfDoc.numPages} páginas.`);
+                        console.log(`Total de elementos de conteúdo (páginas): ${allText.length}`);
+                        console.log(`Texto extraído do PDF: ${state.pdfDoc.numPages} páginas. state.elementosConteudo[0] (primeiros 100 chars):`, state.elementosConteudo[0] ? state.elementosConteudo[0].substring(0, 100) : "Vazio ou não existe");
                     } catch (pdfExtractError) {
-                        console.error("Erro durante a extração de texto do PDF:", pdfExtractError);
+                        console.error("Erro durante a extração de texto do PDF (pdf.js getTextContent):", pdfExtractError);
                         setStatusMessage(`Erro ao extrair texto do PDF: ${pdfExtractError.message}`, true);
                         state.pdfDoc = null;
                         return; // Stop execution if PDF extraction fails
@@ -388,11 +403,13 @@
 
                 if (state.elementosConteudo.length === 0 || state.elementosConteudo.every(text => text.trim() === '')) {
                     setStatusMessage("Nenhum conteúdo válido para ler foi encontrado.", true);
+                    console.error("state.elementosConteudo está vazio ou contém apenas strings vazias.");
                     return;
                 }
 
                 if (!prepararProximoConteudo()) {
-                    setStatusMessage("Não foi possível preparar o texto para leitura.", true);
+                    setStatusMessage("Não foi possível preparar o texto para leitura. Conteúdo pode estar vazio.", true);
+                    console.error("prepararProximoConteudo retornou false, apesar de haver elementosConteudo.");
                     return;
                 }
 
@@ -469,7 +486,11 @@
                     try {
                         const arrayBuffer = await file.arrayBuffer();
                         state.pdfDoc = await getDocument(arrayBuffer).promise;
-                        setStatusMessage(`PDF "${file.name}" carregado. ${state.pdfDoc.numPages} páginas. Clique em 'Iniciar Leitura' para começar.`, false);
+                        // Use o título do documento se disponível, senão o nome do arquivo
+                        const pdfMetadata = await state.pdfDoc.getMetadata();
+                        const pdfTitle = pdfMetadata.info.Title || file.name;
+                        setStatusMessage(`PDF "${pdfTitle}" carregado. ${state.pdfDoc.numPages} páginas. Clique em 'Iniciar Leitura' para começar.`, false);
+                        console.log("PDF carregado, informações:", pdfMetadata.info);
                     } catch (error) {
                         console.error("Erro ao carregar PDF (pdf.js getDocument):", error);
                         setStatusMessage(`Erro ao carregar PDF: ${error.message}`, true);
