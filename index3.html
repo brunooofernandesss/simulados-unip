@@ -306,9 +306,6 @@
                 colorCycleIntervalId: null, // ID do intervalo para o ciclo de cores
                 currentHue: 0, // Matiz atual para o ciclo de cores HSL
                 colorCycleSpeed: 0.5, // Velocidade inicial de incremento do hue (p. ex., 0.5 graus por tick)
-                flashIntervalId: null, // ID do intervalo para o piscar branco
-                isWhiteFlashOn: false, // Estado do piscar branco
-                flashSpeed: 100, // Velocidade inicial do piscar branco (ms por troca)
                 accelerationTimeoutId: null // ID do timeout para a aceleração
             };
 
@@ -423,13 +420,11 @@
                 pdfFileInput.disabled = false;
                 
                 stopColorCycling(); // Garante que o ciclo de cores pare
-                stopWhiteFlash(); // Garante que o piscar branco pare
                 
                 clearTimeout(state.accelerationTimeoutId); // Limpa qualquer timeout de aceleração pendente
                 state.accelerationTimeoutId = null;
                 state.colorCycleSpeed = 0.5; // Reseta a velocidade do ciclo de cores
-                state.flashSpeed = 100; // Reseta a velocidade do piscar branco
-
+                
                 console.log("Estado limpo.");
             }
 
@@ -480,11 +475,10 @@
                 state.intervaloLeitura = setTimeout(avancarLeitura, tempoEspera);
             }
 
-            // --- Funções de Ciclo de Cores e Piscar Branco ---
+            // --- Funções de Ciclo de Cores com Aceleração ---
             function startColorCycling(speedIncrement = 0.5) {
                 console.log(`Iniciando ciclo de cores com incremento: ${speedIncrement}`);
                 stopColorCycling(); // Garante que qualquer ciclo existente seja parado
-                stopWhiteFlash(); // Garante que o piscar branco esteja parado
 
                 state.colorCycleSpeed = speedIncrement; // Atualiza a velocidade
                 const intervalMs = 1000 / 120; // Aproximadamente 8.33ms para 120Hz
@@ -503,31 +497,7 @@
                     document.body.style.backgroundColor = '#f0f2f5'; // Reseta para a cor padrão
                 }
             }
-
-            function startWhiteFlash(flashIntervalMs = 100) {
-                console.log(`Iniciando piscar branco com intervalo: ${flashIntervalMs}ms`);
-                stopColorCycling(); // Para o ciclo de cores antes de piscar branco
-                stopWhiteFlash(); // Garante que qualquer piscar existente seja parado
-
-                state.flashSpeed = flashIntervalMs; // Atualiza a velocidade
-                state.isWhiteFlashOn = false; // Começa desligado para a primeira troca
-
-                state.flashIntervalId = setInterval(() => {
-                    state.isWhiteFlashOn = !state.isWhiteFlashOn;
-                    document.body.style.backgroundColor = state.isWhiteFlashOn ? 'white' : '#f0f2f5'; // Troca entre branco e a cor padrão
-                }, state.flashSpeed);
-            }
-
-            function stopWhiteFlash() {
-                if (state.flashIntervalId) {
-                    console.log("Parando piscar branco...");
-                    clearInterval(state.flashIntervalId);
-                    state.flashIntervalId = null;
-                    document.body.style.backgroundColor = '#f0f2f5'; // Reseta para a cor padrão
-                }
-            }
-
-
+            
             // --- Lógica de Controle ---
             async function iniciarLeitura() {
                 limparEstadoLeitura(); // Isto manterá state.pdfDoc se já estiver carregado
@@ -601,41 +571,32 @@
                 textInput.disabled = true;
                 pdfFileInput.disabled = true;
                 
-                // --- Lógica de aceleração dos efeitos de fundo ---
+                // --- Lógica de aceleração do ciclo de cores ---
                 let currentHueSpeed = 0.5; // Velocidade inicial do ciclo de cores
-                let currentFlashInterval = 100; // Intervalo inicial do piscar branco (ms)
+                const maxHueSpeed = 30; // Velocidade máxima do ciclo de cores (ajuste conforme o desejado)
+                const accelerationStep = 2; // Quanto a velocidade aumenta a cada etapa
+                const accelerationInterval = 3000; // Intervalo para acelerar (ms)
 
                 // 1. Inicia o ciclo de cores lentamente
                 startColorCycling(currentHueSpeed);
+                setStatusMessage("Ciclo de cores iniciado (progressão lenta).");
 
-                // 2. Acelera o ciclo de cores
-                state.accelerationTimeoutId = setTimeout(() => {
-                    currentHueSpeed = 5; // Acelera o ciclo de cores (pode ajustar o valor)
-                    startColorCycling(currentHueSpeed);
-                    setStatusMessage("Intensificando o ciclo de cores!");
+                // 2. Função para acelerar o ciclo de cores
+                const accelerateColorCycle = () => {
+                    if (!state.lendo || state.pausado) return; // Parar se a leitura for interrompida ou pausada
 
-                    // 3. Transiciona para o piscar branco e acelera o piscar
-                    state.accelerationTimeoutId = setTimeout(() => {
-                        currentFlashInterval = 80; // Intervalo inicial do piscar branco
-                        startWhiteFlash(currentFlashInterval);
-                        setStatusMessage("Transição para luz branca piscando!");
+                    if (currentHueSpeed < maxHueSpeed) {
+                        currentHueSpeed = Math.min(currentHueSpeed + accelerationStep, maxHueSpeed);
+                        startColorCycling(currentHueSpeed); // Reinicia o ciclo com nova velocidade
+                        setStatusMessage(`Intensificando o ciclo de cores! Velocidade: ${currentHueSpeed.toFixed(1)}`);
+                        state.accelerationTimeoutId = setTimeout(accelerateColorCycle, accelerationInterval);
+                    } else {
+                        setStatusMessage("Velocidade máxima do ciclo de cores atingida!");
+                    }
+                };
 
-                        // 4. Acelera o piscar branco progressivamente
-                        const accelerateFlash = (interval) => {
-                            if (!state.lendo || state.pausado) return; // Parar se a leitura for interrompida
-                            
-                            if (interval > 10) { // Limite mínimo para o intervalo (10ms ~ 100Hz)
-                                interval -= 10; // Reduz o intervalo para acelerar (pode ajustar o valor)
-                                startWhiteFlash(interval); // Reinicia o piscar com nova velocidade
-                                state.accelerationTimeoutId = setTimeout(() => accelerateFlash(interval), 1000); // Acelera a cada 1 segundo
-                            } else {
-                                setStatusMessage("Velocidade máxima de piscar branco atingida!");
-                            }
-                        };
-                        state.accelerationTimeoutId = setTimeout(() => accelerateFlash(currentFlashInterval), 1000); // Começa a acelerar após 1 segundo
-
-                    }, 5000); // 5 segundos após a aceleração do ciclo de cores
-                }, 5000); // 5 segundos após o início da leitura
+                // Inicia a aceleração após um tempo inicial
+                state.accelerationTimeoutId = setTimeout(accelerateColorCycle, accelerationInterval);
 
                 avancarLeitura();
                 setStatusMessage("Leitura iniciada!");
@@ -654,21 +615,22 @@
                     clearTimeout(state.intervaloLeitura);
                     clearTimeout(state.accelerationTimeoutId); // Limpa timeout de aceleração
                     stopColorCycling(); // Para o ciclo de cores
-                    stopWhiteFlash(); // Para o piscar branco
                     pausarRetomarBtn.textContent = "Retomar";
                     pausarRetomarBtn.classList.add('paused');
                     setStatusMessage("Leitura pausada.");
                 } else {
-                    // Ao retomar, reinicia a lógica de aceleração a partir do estado atual
-                    // Se precisar retomar do ponto exato, o estado da aceleração precisaria ser mais complexo.
-                    // Por simplicidade, ao retomar, ele reinicia o ciclo de aceleração.
-                    // Para uma experiência mais fluida, você pode querer apenas retomar o último efeito ativo.
-                    // Por enquanto, ele reinicia o efeito do zero ao retomar.
-                    if (document.body.style.backgroundColor === 'white') { // Se estava piscando branco
-                        startWhiteFlash(state.flashSpeed);
-                    } else { // Se estava ciclando cores
-                        startColorCycling(state.colorCycleSpeed);
-                    }
+                    // Ao retomar, reinicia a lógica de aceleração a partir do ponto atual
+                    // ou do início da aceleração, dependendo da experiência desejada.
+                    // Para simplificar, ele reinicia o ciclo de aceleração desde o ponto de pausa.
+                    // Se a aceleração já havia atingido o máximo antes da pausa, ela recomeçará do máximo.
+                    startColorCycling(state.colorCycleSpeed); // Retoma o ciclo com a última velocidade atingida
+                    state.accelerationTimeoutId = setTimeout(() => {
+                        // Reagenda a aceleração se ainda não atingiu a velocidade máxima
+                        if (state.colorCycleSpeed < 30) { // Usar o maxHueSpeed definido acima (30)
+                            accelerateColorCycle(); // Chama a função que continua a aceleração
+                        }
+                    }, 1000); // Dá um pequeno delay antes de verificar a aceleração
+
                     avancarLeitura();
                     pausarRetomarBtn.textContent = "Pausar";
                     pausarRetomarBtn.classList.remove('paused');
