@@ -281,7 +281,8 @@
                 return Math.max(tempo, 150);
             }
 
-            function limparEstadoLeitura() {
+            // AQUI ESTÁ A MUDANÇA PRINCIPAL:
+            function limparEstadoLeitura(clearPdfDoc = false) { // Parâmetro para decidir se limpa o PDF
                 console.log("Limpando estado de leitura...");
                 state.lendo = false;
                 state.pausado = false;
@@ -291,7 +292,13 @@
                 state.indiceUnidadeAtual = 0;
                 state.unidadesTexto = [];
                 state.elementosConteudo = [];
-                state.pdfDoc = null;
+                
+                if (clearPdfDoc) { // Só limpa state.pdfDoc se clearPdfDoc for true
+                    state.pdfDoc = null;
+                    pdfFileInput.value = ''; // Limpa o nome do arquivo selecionado no input
+                    console.log("state.pdfDoc foi limpo.");
+                }
+                
                 rsvpDisplay.textContent = "";
                 iniciarPararBtn.textContent = "Iniciar Leitura";
                 iniciarPararBtn.classList.remove('playing');
@@ -352,12 +359,8 @@
 
             // --- Lógica de Controle ---
             async function iniciarLeitura() {
-                if (state.lendo) {
-                    setStatusMessage("Leitura já iniciada.", false);
-                    return;
-                }
-
-                limparEstadoLeitura(); // Reseta o estado
+                // AQUI FOI AJUSTADO: Não passa 'true' para limparEstadoLeitura()
+                limparEstadoLeitura(); // Isto manterá state.pdfDoc se já estiver carregado
 
                 let contentToRead = "";
                 if (textInput.value.trim()) {
@@ -393,7 +396,7 @@
                     } catch (pdfExtractError) {
                         console.error("Erro durante a extração de texto do PDF (pdf.js getTextContent):", pdfExtractError);
                         setStatusMessage(`Erro ao extrair texto do PDF: ${pdfExtractError.message}`, true);
-                        state.pdfDoc = null;
+                        state.pdfDoc = null; // Em caso de erro na extração, limpa o PDF carregado
                         return; // Stop execution if PDF extraction fails
                     }
                 } else {
@@ -404,12 +407,14 @@
                 if (state.elementosConteudo.length === 0 || state.elementosConteudo.every(text => text.trim() === '')) {
                     setStatusMessage("Nenhum conteúdo válido para ler foi encontrado.", true);
                     console.error("state.elementosConteudo está vazio ou contém apenas strings vazias.");
+                    limparEstadoLeitura(true); // Se não há conteúdo válido, reinicia tudo, incluindo o PDF
                     return;
                 }
 
                 if (!prepararProximoConteudo()) {
                     setStatusMessage("Não foi possível preparar o texto para leitura. Conteúdo pode estar vazio.", true);
                     console.error("prepararProximoConteudo retornou false, apesar de haver elementosConteudo.");
+                    limparEstadoLeitura(true); // Se não consegue preparar, reinicia tudo
                     return;
                 }
 
@@ -429,7 +434,7 @@
 
             function pararLeitura() {
                 if (!state.lendo) return;
-                limparEstadoLeitura();
+                limparEstadoLeitura(true); // Ao parar, limpa também o PDF para um novo início
                 setStatusMessage("Leitura parada.");
             }
 
@@ -481,8 +486,9 @@
             pdfFileInput.addEventListener("change", async (event) => {
                 const file = event.target.files[0];
                 if (file && file.type === "application/pdf") {
+                    limparEstadoLeitura(true); // Limpa tudo, incluindo PDF anterior, ao carregar um novo
                     setStatusMessage("Carregando PDF...", false);
-                    textInput.value = ""; // Clear text input if PDF is loaded
+                    textInput.value = ""; // Limpa a área de texto se um PDF for carregado
                     try {
                         const arrayBuffer = await file.arrayBuffer();
                         state.pdfDoc = await getDocument(arrayBuffer).promise;
@@ -498,7 +504,15 @@
                     }
                 } else if (file) {
                     setStatusMessage("Por favor, selecione um arquivo PDF válido.", true);
-                    state.pdfDoc = null;
+                    limparEstadoLeitura(true); // Limpa o estado se um arquivo não PDF foi selecionado
+                }
+            });
+
+            // NOVO: Limpa o estado PDF se o usuário começar a digitar texto
+            textInput.addEventListener("input", () => {
+                if (textInput.value.trim().length > 0) {
+                    // Se o usuário digitou texto, assume que ele quer usar o texto e não o PDF
+                    limparEstadoLeitura(true); 
                 }
             });
 
@@ -517,7 +531,7 @@
                     numPalavrasSlider.value = state.numPalavras;
                 }
                 atualizarConfiguracoes();
-                limparEstadoLeitura();
+                limparEstadoLeitura(true); // No início, limpa tudo, incluindo PDF
                 console.log("Site inicializado com configurações:", state.velocidade, state.numPalavras);
             }
 
