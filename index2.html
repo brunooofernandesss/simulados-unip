@@ -324,6 +324,20 @@
                 setTimeout(() => { statusMessageDiv.textContent = ""; statusMessageDiv.className = ""; }, 5000);
             }
 
+            function postProcessPdfText(text) {
+                // Remove hífens no final da linha e recombina a palavra
+                // Ex: "exibi-\nção" -> "exibição"
+                // Ex: "palavra-\r\nlonga" -> "palavra-longa" (manter o hífen se não for quebra de linha visual)
+                text = text.replace(/-\s*\n\s*/g, ''); // Remove hífen seguido de espaço(s) e quebra de linha
+                text = text.replace(/-\s*\r\n\s*/g, ''); // Para quebras de linha Windows
+
+                // Substitui múltiplas quebras de linha ou espaços por um único espaço
+                text = text.replace(/\s+/g, ' ').trim();
+
+                return text;
+            }
+
+
             function exibirPalavrasRSVP(palavras) {
                 if (rsvpDisplay) {
                     const texto = palavras.join(" ");
@@ -471,7 +485,7 @@
                     state.elementosConteudo = [contentToRead]; // Trata como um único bloco de texto
                     console.log("Modo: Texto Colado. Conteúdo: ", contentToRead.substring(0, 100) + "...");
                 } else if (state.pdfDoc) {
-                    setStatusMessage("Extraindo texto do PDF...", false);
+                    setStatusMessage("Extraindo e processando texto do PDF...", false);
                     console.log("Modo: PDF Carregado. Extraindo texto...");
                     const allText = [];
                     try {
@@ -479,16 +493,19 @@
                             console.log(`Extraindo texto da página ${i}/${state.pdfDoc.numPages}...`);
                             const page = await state.pdfDoc.getPage(i);
                             const textContent = await page.getTextContent();
-                            // Filtrar itens vazios antes de mapear e juntar
-                            const pageText = textContent.items
-                                .filter(item => item.str.trim().length > 0) // Garante que há texto
+                            
+                            let pageText = textContent.items
+                                .filter(item => item.str.trim().length > 0)
                                 .map(item => item.str)
-                                .join(' ')
-                                .replace(/\s+/g, ' ') // Substitui múltiplos espaços por um único
+                                .join(' ') // Junta itens com espaço
                                 .trim();
+
+                            // --- NOVA ETAPA DE PÓS-PROCESSAMENTO PARA PDF ---
+                            pageText = postProcessPdfText(pageText);
+                            // -------------------------------------------------
                             
                             allText.push(pageText);
-                            console.log(`  -> Página ${i} texto extraído (primeiros 100 chars):`, pageText.substring(0, 100), ` (Tamanho: ${pageText.length})`);
+                            console.log(`  -> Página ${i} texto extraído e processado (primeiros 100 chars):`, pageText.substring(0, 100), ` (Tamanho: ${pageText.length})`);
                             if (pageText.length === 0) {
                                 console.warn(`  -> Página ${i} extraída vazia ou apenas espaços.`);
                             }
