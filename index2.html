@@ -157,6 +157,7 @@
         }
 
         #rsvp-display {
+            /* Base styles for the display box */
             font-size: 48px; /* Larger base font for better visibility */
             font-weight: bold;
             text-align: center;
@@ -169,15 +170,15 @@
             justify-content: center;
             align-items: center;
             margin-top: 30px;
+
+            /* Properties for single-line display of words */
             white-space: nowrap; /* Impede a quebra de linha */
             overflow: hidden; /* Esconde o texto que não cabe */
             text-overflow: ellipsis; /* Mostra "..." se o texto for cortado */
             line-height: 1.2; /* Ajuste na altura da linha */
-            transition: font-size 0.1s ease; /* Suaviza as mudanças de tamanho da fonte */
+            transition: font-size 0.05s ease; /* Suaviza as mudanças de tamanho da fonte (mais rápido) */
 
-            /* Tentativa de ajuste dinâmico da fonte */
-            --num-palavras-display: 1; /* Valor inicial */
-            font-size: clamp(20px, calc(10vw + 10px / var(--num-palavras-display)), 60px); /* Ajuste com vw e clamp */
+            /* Dynamic font size will now be handled by JavaScript */
         }
 
         #status-message {
@@ -238,7 +239,7 @@
             #rsvp-display {
                 padding: 20px 10px;
                 min-height: 90px;
-                font-size: clamp(16px, calc(8vw + 8px / var(--num-palavras-display)), 40px); /* Ajuste para telas menores */
+                /* Font size will be managed by JS, but base can be adjusted here if needed */
             }
             #status-message {
                 font-size: 0.9em;
@@ -300,6 +301,7 @@
                 indiceUnidadeAtual: 0,
                 intervaloLeitura: null,
                 pdfDoc: null, // Referência ao objeto PDFDocumentProxy quando um PDF é carregado
+                initialFontSize: 48 // Store the initial font size for resetting
             };
 
             // --- Elementos do DOM ---
@@ -326,9 +328,53 @@
                 if (rsvpDisplay) {
                     const texto = palavras.join(" ");
                     rsvpDisplay.textContent = texto;
-                    rsvpDisplay.style.setProperty('--num-palavras-display', palavras.length);
+                    // Remove dynamic font size from CSS as JS will control it
+                    rsvpDisplay.style.removeProperty('--num-palavras-display');
+
+                    // Reset font size to initial before checking
+                    rsvpDisplay.style.fontSize = `${state.initialFontSize}px`;
+
+                    // Measure the width of the text *after* setting its content and initial font size
+                    let textWidth = rsvpDisplay.scrollWidth; // Use scrollWidth to get the full width even if it overflows
+
+                    // Get the available width of the box (considering padding)
+                    // Use getBoundingClientRect().width to get actual rendered width
+                    const computedStyle = window.getComputedStyle(rsvpDisplay);
+                    const paddingLeft = parseFloat(computedStyle.paddingLeft);
+                    const paddingRight = parseFloat(computedStyle.paddingRight);
+                    const boxAvailableWidth = rsvpDisplay.getBoundingClientRect().width - (paddingLeft + paddingRight);
+
+                    let currentFontSize = state.initialFontSize;
+                    const minFontSize = 14; // Minimum font size to prevent illegibility
+                    const decrementAmount = 2; // Pixels to decrease font size by
+
+                    // Decrease font size while text is wider than the available box width
+                    while (textWidth > boxAvailableWidth && currentFontSize > minFontSize) {
+                        currentFontSize -= decrementAmount;
+                        rsvpDisplay.style.fontSize = `${currentFontSize}px`;
+                        // Re-measure text width with new font size
+                        textWidth = rsvpDisplay.scrollWidth;
+                    }
+
+                    // If text is now significantly smaller than box (e.g., after a very long word),
+                    // try to increase font size back towards initialFontSize, without overflowing
+                    if (textWidth < boxAvailableWidth && currentFontSize < state.initialFontSize) {
+                        let tempFontSize = currentFontSize;
+                        while (tempFontSize < state.initialFontSize) {
+                            tempFontSize += decrementAmount;
+                            rsvpDisplay.style.fontSize = `${tempFontSize}px`; // Temporarily apply
+                            if (rsvpDisplay.scrollWidth <= boxAvailableWidth) {
+                                currentFontSize = tempFontSize; // It fits, keep this size
+                            } else {
+                                rsvpDisplay.style.fontSize = `${currentFontSize}px`; // It overflowed, revert to previous fit
+                                break;
+                            }
+                        }
+                    }
+                    rsvpDisplay.style.fontSize = `${currentFontSize}px`; // Ensure final size is set
                 }
             }
+
 
             function calcularTempoEspera(textoUnidade) {
                 const numPalavras = textoUnidade.split(/\s+/).filter(p => p.length > 0).length;
@@ -355,6 +401,9 @@
                 }
                 
                 rsvpDisplay.textContent = "";
+                // Reset font size to initial when clearing
+                rsvpDisplay.style.fontSize = `${state.initialFontSize}px`;
+
                 iniciarPararBtn.textContent = "Iniciar Leitura";
                 iniciarPararBtn.classList.remove('playing');
                 pausarRetomarBtn.textContent = "Pausar";
@@ -414,7 +463,6 @@
 
             // --- Lógica de Controle ---
             async function iniciarLeitura() {
-                // AQUI FOI AJUSTADO: Não passa 'true' para limparEstadoLeitura()
                 limparEstadoLeitura(); // Isto manterá state.pdfDoc se já estiver carregado
 
                 let contentToRead = "";
@@ -514,11 +562,12 @@
                 state.numPalavras = parseInt(numPalavrasSlider.value);
                 velocidadeValorSpan.textContent = state.velocidade;
                 numPalavrasValorSpan.textContent = state.numPalavras;
-                rsvpDisplay.style.setProperty('--num-palavras-display', state.numPalavras);
+                // Remove dynamic font size from CSS, it's handled by JS now
+                // rsvpDisplay.style.setProperty('--num-palavras-display', state.numPalavras); 
 
                 if (state.lendo && !state.pausado) {
                     clearTimeout(state.intervaloLeitura);
-                    avancarLeitura();
+                    avancarLeitura(); // Re-evaluate timing with new speed
                 }
                 localStorage.setItem('rsvpVelocidade', state.velocidade);
                 localStorage.setItem('rsvpNumPalavras', state.numPalavras);
@@ -563,7 +612,7 @@
                 }
             });
 
-            // NOVO: Limpa o estado PDF se o usuário começar a digitar texto
+            // Limpa o estado PDF se o usuário começar a digitar texto
             textInput.addEventListener("input", () => {
                 if (textInput.value.trim().length > 0) {
                     // Se o usuário digitou texto, assume que ele quer usar o texto e não o PDF
@@ -574,6 +623,9 @@
             // --- Inicialização ---
             function init() {
                 console.log("Inicializando site...");
+                // Store initial font size from CSS
+                state.initialFontSize = parseFloat(window.getComputedStyle(rsvpDisplay).fontSize);
+
                 const savedVelocidade = localStorage.getItem('rsvpVelocidade');
                 const savedNumPalavras = localStorage.getItem('rsvpNumPalavras');
 
