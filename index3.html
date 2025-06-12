@@ -16,7 +16,7 @@
             justify-content: center;
             align-items: flex-start; /* Align to top */
             min-height: 100vh;
-            transition: background-color 0.1s ease-out; /* Suaviza a transição inicial ao parar */
+            /* Remove transition for background-color here, as JS will control it rapidly */
         }
 
         .container {
@@ -303,8 +303,13 @@
                 intervaloLeitura: null,
                 pdfDoc: null, // Referência ao objeto PDFDocumentProxy quando um PDF é carregado
                 initialFontSize: 48, // Store the initial font size for resetting
-                colorCycleIntervalId: null, // Novo: ID do intervalo para o ciclo de cores
-                currentHue: 0 // Novo: Matiz atual para o ciclo de cores HSL
+                colorCycleIntervalId: null, // ID do intervalo para o ciclo de cores
+                currentHue: 0, // Matiz atual para o ciclo de cores HSL
+                colorCycleSpeed: 0.5, // Velocidade inicial de incremento do hue (p. ex., 0.5 graus por tick)
+                flashIntervalId: null, // ID do intervalo para o piscar branco
+                isWhiteFlashOn: false, // Estado do piscar branco
+                flashSpeed: 100, // Velocidade inicial do piscar branco (ms por troca)
+                accelerationTimeoutId: null // ID do timeout para a aceleração
             };
 
             // --- Elementos do DOM ---
@@ -324,7 +329,8 @@
                 console.log(`Status: ${message} (Erro: ${isError})`);
                 statusMessageDiv.textContent = message;
                 statusMessageDiv.className = isError ? "status-error" : "status-success";
-                setTimeout(() => { statusMessageDiv.textContent = ""; statusMessageDiv.className = ""; }, 5000);
+                clearTimeout(statusMessageDiv.dataset.timeoutId); // Clear previous timeout
+                statusMessageDiv.dataset.timeoutId = setTimeout(() => { statusMessageDiv.textContent = ""; statusMessageDiv.className = ""; }, 5000);
             }
 
             function postProcessPdfText(text) {
@@ -344,53 +350,42 @@
                 if (rsvpDisplay) {
                     const texto = palavras.join(" ");
                     rsvpDisplay.textContent = texto;
-                    // Remove dynamic font size from CSS as JS will control it
                     rsvpDisplay.style.removeProperty('--num-palavras-display');
 
-                    // Reset font size to initial before checking
                     rsvpDisplay.style.fontSize = `${state.initialFontSize}px`;
 
-                    // Measure the width of the text *after* setting its content and initial font size
-                    let textWidth = rsvpDisplay.scrollWidth; // Use scrollWidth to get the full width even if it overflows
-
-                    // Get the available width of the box (considering padding)
-                    // Use getBoundingClientRect().width to get actual rendered width
+                    let textWidth = rsvpDisplay.scrollWidth;
                     const computedStyle = window.getComputedStyle(rsvpDisplay);
                     const paddingLeft = parseFloat(computedStyle.paddingLeft);
                     const paddingRight = parseFloat(computedStyle.paddingRight);
                     const boxAvailableWidth = rsvpDisplay.getBoundingClientRect().width - (paddingLeft + paddingRight);
 
                     let currentFontSize = state.initialFontSize;
-                    const minFontSize = 14; // Minimum font size to prevent illegibility
-                    const decrementAmount = 2; // Pixels to decrease font size by
+                    const minFontSize = 14;
+                    const decrementAmount = 2;
 
-                    // Decrease font size while text is wider than the available box width
                     while (textWidth > boxAvailableWidth && currentFontSize > minFontSize) {
                         currentFontSize -= decrementAmount;
                         rsvpDisplay.style.fontSize = `${currentFontSize}px`;
-                        // Re-measure text width with new font size
                         textWidth = rsvpDisplay.scrollWidth;
                     }
 
-                    // If text is now significantly smaller than box (e.g., after a very long word),
-                    // try to increase font size back towards initialFontSize, without overflowing
                     if (textWidth < boxAvailableWidth && currentFontSize < state.initialFontSize) {
                         let tempFontSize = currentFontSize;
                         while (tempFontSize < state.initialFontSize) {
                             tempFontSize += decrementAmount;
-                            rsvpDisplay.style.fontSize = `${tempFontSize}px`; // Temporarily apply
+                            rsvpDisplay.style.fontSize = `${tempFontSize}px`;
                             if (rsvpDisplay.scrollWidth <= boxAvailableWidth) {
-                                currentFontSize = tempFontSize; // It fits, keep this size
+                                currentFontSize = tempFontSize;
                             } else {
-                                rsvpDisplay.style.fontSize = `${currentFontSize}px`; // It overflowed, revert to previous fit
+                                rsvpDisplay.style.fontSize = `${currentFontSize}px`;
                                 break;
                             }
                         }
                     }
-                    rsvpDisplay.style.fontSize = `${currentFontSize}px`; // Ensure final size is set
+                    rsvpDisplay.style.fontSize = `${currentFontSize}px`;
                 }
             }
-
 
             function calcularTempoEspera(textoUnidade) {
                 const numPalavras = textoUnidade.split(/\s+/).filter(p => p.length > 0).length;
@@ -399,7 +394,7 @@
                 return Math.max(tempo, 150);
             }
 
-            function limparEstadoLeitura(clearPdfDoc = false) { // Parâmetro para decidir se limpa o PDF
+            function limparEstadoLeitura(clearPdfDoc = false) {
                 console.log("Limpando estado de leitura...");
                 state.lendo = false;
                 state.pausado = false;
@@ -410,14 +405,13 @@
                 state.unidadesTexto = [];
                 state.elementosConteudo = [];
                 
-                if (clearPdfDoc) { // Só limpa state.pdfDoc se clearPdfDoc for true
+                if (clearPdfDoc) {
                     state.pdfDoc = null;
-                    pdfFileInput.value = ''; // Limpa o nome do arquivo selecionado no input
+                    pdfFileInput.value = '';
                     console.log("state.pdfDoc foi limpo.");
                 }
                 
                 rsvpDisplay.textContent = "";
-                // Reset font size to initial when clearing
                 rsvpDisplay.style.fontSize = `${state.initialFontSize}px`;
 
                 iniciarPararBtn.textContent = "Iniciar Leitura";
@@ -428,7 +422,14 @@
                 textInput.disabled = false;
                 pdfFileInput.disabled = false;
                 
-                stopColorCycling(); // Garante que o ciclo de cores pare ao limpar o estado
+                stopColorCycling(); // Garante que o ciclo de cores pare
+                stopWhiteFlash(); // Garante que o piscar branco pare
+                
+                clearTimeout(state.accelerationTimeoutId); // Limpa qualquer timeout de aceleração pendente
+                state.accelerationTimeoutId = null;
+                state.colorCycleSpeed = 0.5; // Reseta a velocidade do ciclo de cores
+                state.flashSpeed = 100; // Reseta a velocidade do piscar branco
+
                 console.log("Estado limpo.");
             }
 
@@ -479,20 +480,19 @@
                 state.intervaloLeitura = setTimeout(avancarLeitura, tempoEspera);
             }
 
-            // --- Funções de Ciclo de Cores ---
-            function startColorCycling() {
-                console.log("Iniciando ciclo de cores (120Hz)...");
+            // --- Funções de Ciclo de Cores e Piscar Branco ---
+            function startColorCycling(speedIncrement = 0.5) {
+                console.log(`Iniciando ciclo de cores com incremento: ${speedIncrement}`);
                 stopColorCycling(); // Garante que qualquer ciclo existente seja parado
+                stopWhiteFlash(); // Garante que o piscar branco esteja parado
+
+                state.colorCycleSpeed = speedIncrement; // Atualiza a velocidade
                 const intervalMs = 1000 / 120; // Aproximadamente 8.33ms para 120Hz
 
                 state.colorCycleIntervalId = setInterval(() => {
-                    state.currentHue = (state.currentHue + 1) % 360; // Incrementa o matiz (hue)
-                    // Um incremento de 1 significa que leva 360 frames para completar um ciclo completo.
-                    // A 120Hz, isso seria 360 / 120 = 3 segundos para um loop completo do espectro de cores.
+                    state.currentHue = (state.currentHue + state.colorCycleSpeed) % 360;
                     document.body.style.backgroundColor = `hsl(${state.currentHue}, 100%, 50%)`;
                 }, intervalMs);
-
-                console.warn("Atenção: O ciclo de cores a 120Hz usa setInterval. Para animações visuais mais suaves e sincronizadas com a taxa de atualização da tela, requestAnimationFrame é geralmente preferível, mas setInterval é usado aqui para tentar atingir a frequência especificada.");
             }
 
             function stopColorCycling() {
@@ -500,10 +500,33 @@
                     console.log("Parando ciclo de cores...");
                     clearInterval(state.colorCycleIntervalId);
                     state.colorCycleIntervalId = null;
-                    // Opcionalmente, redefine o fundo para a cor original ou neutra
-                    document.body.style.backgroundColor = '#f0f2f5'; // Cor de fundo padrão do body
+                    document.body.style.backgroundColor = '#f0f2f5'; // Reseta para a cor padrão
                 }
             }
+
+            function startWhiteFlash(flashIntervalMs = 100) {
+                console.log(`Iniciando piscar branco com intervalo: ${flashIntervalMs}ms`);
+                stopColorCycling(); // Para o ciclo de cores antes de piscar branco
+                stopWhiteFlash(); // Garante que qualquer piscar existente seja parado
+
+                state.flashSpeed = flashIntervalMs; // Atualiza a velocidade
+                state.isWhiteFlashOn = false; // Começa desligado para a primeira troca
+
+                state.flashIntervalId = setInterval(() => {
+                    state.isWhiteFlashOn = !state.isWhiteFlashOn;
+                    document.body.style.backgroundColor = state.isWhiteFlashOn ? 'white' : '#f0f2f5'; // Troca entre branco e a cor padrão
+                }, state.flashSpeed);
+            }
+
+            function stopWhiteFlash() {
+                if (state.flashIntervalId) {
+                    console.log("Parando piscar branco...");
+                    clearInterval(state.flashIntervalId);
+                    state.flashIntervalId = null;
+                    document.body.style.backgroundColor = '#f0f2f5'; // Reseta para a cor padrão
+                }
+            }
+
 
             // --- Lógica de Controle ---
             async function iniciarLeitura() {
@@ -578,14 +601,49 @@
                 textInput.disabled = true;
                 pdfFileInput.disabled = true;
                 
-                startColorCycling(); // Inicia o ciclo de cores ao iniciar a leitura
+                // --- Lógica de aceleração dos efeitos de fundo ---
+                let currentHueSpeed = 0.5; // Velocidade inicial do ciclo de cores
+                let currentFlashInterval = 100; // Intervalo inicial do piscar branco (ms)
+
+                // 1. Inicia o ciclo de cores lentamente
+                startColorCycling(currentHueSpeed);
+
+                // 2. Acelera o ciclo de cores
+                state.accelerationTimeoutId = setTimeout(() => {
+                    currentHueSpeed = 5; // Acelera o ciclo de cores (pode ajustar o valor)
+                    startColorCycling(currentHueSpeed);
+                    setStatusMessage("Intensificando o ciclo de cores!");
+
+                    // 3. Transiciona para o piscar branco e acelera o piscar
+                    state.accelerationTimeoutId = setTimeout(() => {
+                        currentFlashInterval = 80; // Intervalo inicial do piscar branco
+                        startWhiteFlash(currentFlashInterval);
+                        setStatusMessage("Transição para luz branca piscando!");
+
+                        // 4. Acelera o piscar branco progressivamente
+                        const accelerateFlash = (interval) => {
+                            if (!state.lendo || state.pausado) return; // Parar se a leitura for interrompida
+                            
+                            if (interval > 10) { // Limite mínimo para o intervalo (10ms ~ 100Hz)
+                                interval -= 10; // Reduz o intervalo para acelerar (pode ajustar o valor)
+                                startWhiteFlash(interval); // Reinicia o piscar com nova velocidade
+                                state.accelerationTimeoutId = setTimeout(() => accelerateFlash(interval), 1000); // Acelera a cada 1 segundo
+                            } else {
+                                setStatusMessage("Velocidade máxima de piscar branco atingida!");
+                            }
+                        };
+                        state.accelerationTimeoutId = setTimeout(() => accelerateFlash(currentFlashInterval), 1000); // Começa a acelerar após 1 segundo
+
+                    }, 5000); // 5 segundos após a aceleração do ciclo de cores
+                }, 5000); // 5 segundos após o início da leitura
+
                 avancarLeitura();
                 setStatusMessage("Leitura iniciada!");
             }
 
             function pararLeitura() {
                 if (!state.lendo) return;
-                limparEstadoLeitura(true); // Ao parar, limpa tudo, incluindo PDF e ciclo de cores
+                limparEstadoLeitura(true); // Ao parar, limpa tudo, incluindo PDF e efeitos de fundo
                 setStatusMessage("Leitura parada.");
             }
 
@@ -594,12 +652,23 @@
                 state.pausado = !state.pausado;
                 if (state.pausado) {
                     clearTimeout(state.intervaloLeitura);
-                    stopColorCycling(); // Para o ciclo de cores ao pausar
+                    clearTimeout(state.accelerationTimeoutId); // Limpa timeout de aceleração
+                    stopColorCycling(); // Para o ciclo de cores
+                    stopWhiteFlash(); // Para o piscar branco
                     pausarRetomarBtn.textContent = "Retomar";
                     pausarRetomarBtn.classList.add('paused');
                     setStatusMessage("Leitura pausada.");
                 } else {
-                    startColorCycling(); // Retoma o ciclo de cores ao retomar
+                    // Ao retomar, reinicia a lógica de aceleração a partir do estado atual
+                    // Se precisar retomar do ponto exato, o estado da aceleração precisaria ser mais complexo.
+                    // Por simplicidade, ao retomar, ele reinicia o ciclo de aceleração.
+                    // Para uma experiência mais fluida, você pode querer apenas retomar o último efeito ativo.
+                    // Por enquanto, ele reinicia o efeito do zero ao retomar.
+                    if (document.body.style.backgroundColor === 'white') { // Se estava piscando branco
+                        startWhiteFlash(state.flashSpeed);
+                    } else { // Se estava ciclando cores
+                        startColorCycling(state.colorCycleSpeed);
+                    }
                     avancarLeitura();
                     pausarRetomarBtn.textContent = "Pausar";
                     pausarRetomarBtn.classList.remove('paused');
@@ -671,7 +740,6 @@
             // --- Inicialização ---
             function init() {
                 console.log("Inicializando site...");
-                // Store initial font size from CSS
                 state.initialFontSize = parseFloat(window.getComputedStyle(rsvpDisplay).fontSize);
 
                 const savedVelocidade = localStorage.getItem('rsvpVelocidade');
@@ -686,7 +754,7 @@
                     numPalavrasSlider.value = state.numPalavras;
                 }
                 atualizarConfiguracoes();
-                limparEstadoLeitura(true); // No início, limpa tudo, incluindo PDF e ciclo de cores
+                limparEstadoLeitura(true); // No início, limpa tudo, incluindo PDF e efeitos de fundo
                 console.log("Site inicializado com configurações:", state.velocidade, state.numPalavras);
             }
 
