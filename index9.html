@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador Anki APKG Unificado (Pasta Única)</title>
+    <style>
+        /* Estilos CSS incorporados */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+        }
+
+        input[type="file"] {
+            display: block;
+            margin: 20px 0;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .card-question, .card-answer {
+            margin-bottom: 10px;
+        }
+
+        .card-question h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .card-answer p {
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Visualizador Anki APKG</h1>
+        <input type="file" id="apkgFileInput" accept=".apkg">
+        <button id="loadApkgButton" disabled>Carregar APKG</button>
+        <div id="cardContainer">
+            </div>
+        <div id="errorMessages" style="color: red;"></div>
+    </div>
+
+    <script src="sql-wasm.js"></script>
+    <script src="jszip.min.js"></script>
+
+    <script>
+        // JavaScript incorporado
+        document.addEventListener('DOMContentLoaded', () => {
+            const apkgFileInput = document.getElementById('apkgFileInput');
+            const loadApkgButton = document.getElementById('loadApkgButton');
+            const cardContainer = document.getElementById('cardContainer');
+            const errorMessages = document.getElementById('errorMessages');
+
+            let SQL; // Variável para armazenar a instância do SQL.js
+
+            // 1. Carregar o WebAssembly do sql.js
+            // O locateFile agora aponta para a mesma pasta
+            initSqlJs({ locateFile: file => `${file}` }).then(function (sql) {
+                SQL = sql;
+                console.log("SQL.js carregado com sucesso!");
+                loadApkgButton.disabled = false; // Habilita o botão após carregar o sql.js
+            }).catch(err => {
+                errorMessages.textContent = `Erro ao carregar SQL.js: ${err.message}`;
+                console.error("Erro ao carregar SQL.js:", err);
+            });
+
+            loadApkgButton.addEventListener('click', async () => {
+                const file = apkgFileInput.files[0];
+                if (!file) {
+                    errorMessages.textContent = "Por favor, selecione um arquivo APKG.";
+                    return;
+                }
+
+                errorMessages.textContent = "";
+                cardContainer.innerHTML = "Carregando...";
+
+                try {
+                    // 2. Ler o arquivo APKG como um ArrayBuffer
+                    const arrayBuffer = await file.arrayBuffer();
+
+                    // 3. Descompactar o APKG (é um arquivo ZIP) com JSZip
+                    const jszip = new JSZip();
+                    const zip = await jszip.loadAsync(arrayBuffer);
+
+                    // O banco de dados SQLite geralmente está em 'collection.anki2' ou 'collection.apkg'
+                    const dbFileName = 'collection.anki2'; // Ou 'collection.apkg'
+                    const dbFile = zip.file(dbFileName);
+
+                    if (!dbFile) {
+                        throw new Error(`Arquivo de banco de dados '${dbFileName}' não encontrado no APKG. ` +
+                                        `Verifique se o APKG contém o banco de dados principal.`);
+                    }
+
+                    const dbUint8Array = await dbFile.async("uint8array");
+                    const db = new SQL.Database(dbUint8Array);
+
+                    // 4. Consultar os dados dos cartões (notas)
+                    const res = db.exec("SELECT id, mid, flds, tags FROM notes LIMIT 100"); // Limita a 100 para teste
+
+                    if (res.length === 0 || !res[0].values) {
+                        cardContainer.innerHTML = "<p>Nenhum cartão encontrado ou formato inesperado.</p>";
+                        db.close();
+                        return;
+                    }
+
+                    const cards = [];
+                    const rows = res[0].values;
+                    const columns = res[0].columns;
+
+                    rows.forEach(row => {
+                        const note = {};
+                        columns.forEach((col, idx) => {
+                            note[col] = row[idx];
+                        });
+
+                        // Anki usa '\x1f' como separador de campo.
+                        const fields = note.flds.split('\x1f');
+                        const question = fields[0] || 'Campo de Pergunta Vazio';
+                        const answer = fields[1] || 'Campo de Resposta Vazio';
+
+                        cards.push({
+                            id: note.id,
+                            question: question,
+                            answer: answer
+                        });
+                    });
+
+                    // 5. Renderizar os cartões em HTML
+                    cardContainer.innerHTML = ''; // Limpa o conteúdo anterior
+                    if (cards.length === 0) {
+                        cardContainer.innerHTML = "<p>Nenhum cartão para exibir após o processamento.</p>";
+                    } else {
+                        cards.forEach(card => {
+                            const cardDiv = document.createElement('div');
+                            cardDiv.classList.add('card');
+                            cardDiv.innerHTML = `
+                                <div class="card-question">
+                                    <h3>Pergunta:</h3>
+                                    <p>${card.question}</p>
+                                </div>
+                                <div class="card-answer">
+                                    <h3>Resposta:</h3>
+                                    <p>${card.answer}</p>
+                                </div>
+                            `;
+                            cardContainer.appendChild(cardDiv);
+                        });
+                    }
+
+                    db.close(); // Fechar o banco de dados
+                    console.log("Cartões carregados e exibidos.");
+
+                } catch (e) {
+                    errorMessages.textContent = `Erro ao processar APKG: ${e.message}. Verifique o console do navegador (F12) para mais detalhes.`;
+                    console.error("Erro detalhado:", e);
+                    cardContainer.innerHTML = ""; // Limpa "Carregando..." em caso de erro
+                }
+            });
+        });
+    </script>
+</body>
+</html>
