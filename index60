@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Código HTML</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #444;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 250px;
+            font-family: monospace;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            flex-grow: 1;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .replace-pair {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .replace-pair input {
+            flex: 1;
+        }
+        .download-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .download-group input {
+            flex-grow: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Editor de Código HTML</h1>
+    <p>Cole seu código HTML, insira o texto que você quer substituir e o novo texto, e clique em "Processar".</p>
+
+    <div class="section">
+        <label for="input-code">Código HTML Original:</label>
+        <textarea id="input-code" placeholder="Cole seu código HTML completo aqui..."></textarea>
+    </div>
+
+    <div class="section">
+        <label>Textos para Substituir:</label>
+        <div class="replace-pair">
+            <input type="text" id="find-text-1" placeholder="Texto a encontrar #1">
+            <input type="text" id="replace-text-1" placeholder="Novo texto #1">
+        </div>
+        <div class="replace-pair">
+            <input type="text" id="find-text-2" placeholder="Texto a encontrar #2">
+            <input type="text" id="replace-text-2" placeholder="Novo texto #2">
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="button-group">
+            <button onclick="processCode()">Processar Código</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <label for="output-code">Código HTML Editado:</label>
+        <textarea id="output-code" readonly></textarea>
+    </div>
+
+    <div class="section download-group">
+        <label for="filename">Nome do Arquivo:</label>
+        <input type="text" id="filename" value="codigo_editado.html">
+        <button onclick="downloadCode()">Baixar Arquivo</button>
+    </div>
+
+</div>
+
+<script>
+function processCode() {
+    const originalCode = document.getElementById('input-code').value;
+    const find1 = document.getElementById('find-text-1').value;
+    const replace1 = document.getElementById('replace-text-1').value;
+    const find2 = document.getElementById('find-text-2').value;
+    const replace2 = document.getElementById('replace-text-2').value;
+
+    let processedCode = originalCode;
+
+    if (find1) {
+        processedCode = processedCode.replaceAll(find1, replace1);
+    }
+    if (find2) {
+        processedCode = processedCode.replaceAll(find2, replace2);
+    }
+
+    document.getElementById('output-code').value = processedCode;
+}
+
+function downloadCode() {
+    const code = document.getElementById('output-code').value;
+    const filename = document.getElementById('filename').value || 'codigo_editado.html';
+
+    if (!code) {
+        alert('Nenhum código para baixar. Por favor, processe o código primeiro.');
+        return;
+    }
+
+    const blob = new Blob([code], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
