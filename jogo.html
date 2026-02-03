@@ -2,74 +2,81 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de Sutura Realista (Corrigido)</title>
+    <title>Simulador de Sutura com Ajuste Manual</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; }
         #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            color: #eee;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            pointer-events: none;
-            user-select: none;
+            position: absolute; top: 10px; width: 100%; text-align: center;
+            color: #eee; background: rgba(0, 0, 0, 0.5); padding: 10px;
+            pointer-events: none; user-select: none; z-index: 10;
         }
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; font-size: 24px;
+            color: white; font-size: 24px; z-index: 20;
         }
-        #gui { position: absolute; top: 60px; right: 10px; }
+        /* Painel para os controles manuais */
+        #gui-container { position: absolute; top: 10px; right: 10px; z-index: 30; }
+        
+        #reset-btn-container { position: absolute; top: 150px; right: 10px; z-index: 30; }
         button { padding: 8px 15px; cursor: pointer; background: #444; color: #fff; border: 1px solid #666; }
     </style>
 </head>
 <body>
     <div id="info">
-        <h2>Simulador de Sutura (Focado no Centro)</h2>
-        <p>Clique de um lado e depois do outro da incisão central.</p>
-        <p>Pontos: <span id="stitch-count">0</span></p>
+        <h2>Simulador com Ajuste Manual de Textura</h2>
+        <p>Use os controles à direita para centralizar o corte.</p>
+        <p>Depois, clique nas bordas para suturar. Pontos: <span id="stitch-count">0</span></p>
     </div>
-    <div id="loading">Carregando texturas...</div>
-    <div id="gui">
-        <button onclick="resetSutures()">Resetar</button>
+    <div id="loading">Carregando texturas e gerando malha...</div>
+    
+    <div id="gui-container"></div>
+    
+    <div id="reset-btn-container">
+        <button onclick="resetSimulation()">Resetar Simulação</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.17.0/dist/lil-gui.umd.min.js"></script>
 
     <script>
         let scene, camera, renderer, raycaster, mouse;
         let skinMesh, needleMesh;
-        let stitches = [];
+        let stitchesObjects = [];
         let startPoint = null;
         let stitchCount = 0;
-        
+        let originalPositions;
+
+        // --- Configurações para o Painel de Ajuste Manual ---
+        const textureSettings = {
+            offsetX: 0.0, // Posição Horizontal inicial
+            offsetY: 0.0  // Posição Vertical inicial
+        };
+        let gui;
+
         const manager = new THREE.LoadingManager();
         manager.onLoad = function ( ) {
             document.getElementById('loading').style.display = 'none';
             init();
+            // Inicia o painel de controle após carregar tudo
+            initGUI(); 
             animate();
         };
 
         const textureLoader = new THREE.TextureLoader(manager);
-        // Certifique-se de que as imagens estão na mesma pasta
         const colorTexture = textureLoader.load('pele_cor.jpg'); 
         const normalTexture = textureLoader.load('pele_normal.jpg');
-
-        // --- CORREÇÃO 1: Remover repetição da textura ---
-        // A textura agora vai esticar uma única vez sobre o plano,
-        // garantindo que o corte no centro da imagem fique no centro do 3D.
+        // Configuração importante: a textura não deve repetir para o ajuste manual funcionar bem
+        colorTexture.wrapS = colorTexture.wrapT = THREE.ClampToEdgeWrapping;
+        normalTexture.wrapS = normalTexture.wrapT = THREE.ClampToEdgeWrapping;
         colorTexture.minFilter = THREE.LinearFilter;
         normalTexture.minFilter = THREE.LinearFilter;
-
 
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x2a2a2a);
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // Câmera posicionada para olhar bem para o centro
-            camera.position.set(0, 10, 4); 
+            camera.position.set(0, 10, 5); 
             camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -82,33 +89,30 @@
             // Luzes
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
-
-            const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1);
             mainLight.position.set(2, 8, 5);
             mainLight.castShadow = true;
             mainLight.shadow.mapSize.set(2048, 2048);
             scene.add(mainLight);
-            
-            const fillLight = new THREE.PointLight(0xffeedd, 0.5);
+            const fillLight = new THREE.PointLight(0xffeedd, 0.4);
             fillLight.position.set(-5, 3, -5);
             scene.add(fillLight);
 
+            // Pele com malha densa
+            const skinGeometry = new THREE.PlaneGeometry(12, 12, 80, 80); 
+            originalPositions = Float32Array.from(skinGeometry.attributes.position.array);
 
-            // Objeto da Pele
-            // Um plano quadrado para combinar com a imagem quadrada
-            const skinGeometry = new THREE.PlaneGeometry(12, 12); 
             const skinMaterial = new THREE.MeshStandardMaterial({ 
                 map: colorTexture,
                 normalMap: normalTexture,
-                normalScale: new THREE.Vector2(1.5, 1.5), // Relevo um pouco mais forte
-                roughness: 0.8,
-                metalness: 0.0,
-                side: THREE.DoubleSide
+                normalScale: new THREE.Vector2(1.5, 1.5),
+                roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide
             });
 
             skinMesh = new THREE.Mesh(skinGeometry, skinMaterial);
             skinMesh.rotation.x = -Math.PI / 2;
             skinMesh.receiveShadow = true;
+            skinMesh.geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
             scene.add(skinMesh);
 
             // Agulha
@@ -128,6 +132,31 @@
             window.addEventListener('mousemove', onMouseMove, false);
         }
 
+        // --- NOVA FUNÇÃO: Inicializa o Painel de Controle Manual ---
+        function initGUI() {
+            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Ajuste de Textura' });
+            
+            // Adiciona slider horizontal (X)
+            gui.add(textureSettings, 'offsetX', -0.5, 0.5, 0.01)
+                .name('Ajuste Horizontal (X)')
+                .onChange(updateTextureOffset);
+
+            // Adiciona slider vertical (Y)
+            gui.add(textureSettings, 'offsetY', -0.5, 0.5, 0.01)
+                .name('Ajuste Vertical (Y)')
+                .onChange(updateTextureOffset);
+
+            // Aplica os valores iniciais (0,0)
+            updateTextureOffset();
+        }
+
+        // Função chamada sempre que movemos os sliders
+        function updateTextureOffset() {
+            // Aplica o deslocamento (offset) em ambas as texturas para manterem a sincronia
+            colorTexture.offset.set(textureSettings.offsetX, textureSettings.offsetY);
+            normalTexture.offset.set(textureSettings.offsetX, textureSettings.offsetY);
+        }
+
         function onMouseMove(event) {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -140,7 +169,9 @@
         }
 
         function onMouseClick(event) {
-            if (event.target.tagName === 'BUTTON') return;
+            // Evita cliques se estiver mexendo no painel GUI ou botão reset
+            if (event.target.closest('.lil-gui') || event.target.tagName === 'BUTTON') return;
+
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObject(skinMesh);
             if (intersects.length > 0) {
@@ -152,54 +183,95 @@
         }
 
         function handleSutureLogic(point) {
-            // Ponto de entrada/saída (pequena esfera para marcar)
-            const dotGeo = new THREE.SphereGeometry(0.05, 8, 8);
-            const dotMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a }); // Cor escura para o furo
-            const dot = new THREE.Mesh(dotGeo, dotMat);
-            dot.position.copy(point);
-            // Levemente afundado na pele para realismo
-            dot.position.y -= 0.02; 
-            scene.add(dot);
-            stitches.push(dot);
+            createPunctureDot(point);
 
             if (!startPoint) {
                 startPoint = point;
             } else {
                 createThread(startPoint, point);
+                
+                // Lógica de aproximação (deformação)
+                // Importante: só funciona bem se o corte estiver centralizado no X=0
+                if(startPoint.x < 0 && point.x > 0) {
+                     pullSkinVertices(startPoint, 'left');
+                     pullSkinVertices(point, 'right');
+                } else if (startPoint.x > 0 && point.x < 0) {
+                     pullSkinVertices(startPoint, 'right');
+                     pullSkinVertices(point, 'left');
+                }
+               
                 startPoint = null;
                 stitchCount++;
                 document.getElementById('stitch-count').innerText = stitchCount;
             }
         }
 
+        function pullSkinVertices(stitchPoint, side) {
+            const positions = skinMesh.geometry.attributes.position.array;
+            const vertexCount = positions.length / 3;
+            const influenceRadius = 2.0; 
+            const pullStrength = 0.6; 
+
+            skinMesh.updateMatrixWorld();
+            let localStitchPoint = stitchPoint.clone();
+            skinMesh.worldToLocal(localStitchPoint);
+
+            for (let i = 0; i < vertexCount; i++) {
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+
+                let vX = positions[ix];
+                let vY = positions[iy];
+
+                const dx = vX - localStitchPoint.x;
+                const dy = vY - localStitchPoint.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance < influenceRadius) {
+                    const falloff = Math.pow(1.0 - (distance / influenceRadius), 2);
+                    const moveAmount = falloff * pullStrength;
+
+                    // Aproximação em direção ao centro (X=0)
+                    if (side === 'left' && vX < 0) {
+                         positions[ix] = Math.min(-0.05, vX + moveAmount);
+                    } 
+                    else if (side === 'right' && vX > 0) {
+                         positions[ix] = Math.max(0.05, vX - moveAmount);
+                    }
+                    positions[iz] += moveAmount * 0.1; // Leve elevação
+                }
+            }
+            skinMesh.geometry.attributes.position.needsUpdate = true;
+            skinMesh.geometry.computeVertexNormals();
+        }
+
+        function createPunctureDot(point) {
+            const dotGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const dotMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+            const dot = new THREE.Mesh(dotGeo, dotMat);
+            dot.position.copy(point);
+            dot.position.y -= 0.01; 
+            scene.add(dot);
+            stitchesObjects.push(dot);
+        }
+
         function createThread(p1, p2) {
             const midPoint = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            
-            // --- CORREÇÃO 2: Fio mais tenso ("fechado") ---
-            // Em vez de um arco alto (+1.2), usamos um arco bem baixo (+0.25).
-            // Isso faz o fio parecer esticado sobre a ferida.
-            midPoint.y += 0.25; 
-
+            midPoint.y += 0.2;
             const curve = new THREE.QuadraticBezierCurve3(p1, midPoint, p2);
             const points = curve.getPoints(20);
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            
-            // Fio azul escuro e mais fino para parecer nylon cirúrgico
             const material = new THREE.LineBasicMaterial({ color: 0x0033cc, linewidth: 2 });
             const curveObject = new THREE.Line(geometry, material);
             scene.add(curveObject);
-            stitches.push(curveObject);
+            stitchesObjects.push(curveObject);
         }
 
         function animateNeedleSpecific(targetPos, callback) {
-            const startY = 0.6;
-            const endY = -0.2; 
-            let down = true;
-            let speed = 0.1; 
-            
-            needleMesh.position.x = targetPos.x;
-            needleMesh.position.z = targetPos.z;
-
+            const startY = 0.6; const endY = -0.1; 
+            let down = true; let speed = 0.15; 
+            needleMesh.position.x = targetPos.x; needleMesh.position.z = targetPos.z;
             const needleAnimation = setInterval(() => {
                 if (down) {
                     needleMesh.position.y -= speed;
@@ -215,12 +287,19 @@
             }, 16);
         }
 
-        function resetSutures() {
-            for (let obj of stitches) { scene.remove(obj); }
-            stitches = [];
+        function resetSimulation() {
+            for (let obj of stitchesObjects) { scene.remove(obj); }
+            stitchesObjects = [];
             startPoint = null;
             stitchCount = 0;
             document.getElementById('stitch-count').innerText = 0;
+
+            const positions = skinMesh.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i++) {
+                positions[i] = originalPositions[i];
+            }
+            skinMesh.geometry.attributes.position.needsUpdate = true;
+            skinMesh.geometry.computeVertexNormals();
         }
 
         function onWindowResize() {
