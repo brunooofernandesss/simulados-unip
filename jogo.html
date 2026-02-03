@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Inspeção Estável com Zoom</title>
+    <title>Inspeção Completa (Giro, Zoom e Arrasto)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         
@@ -66,7 +66,7 @@
         <div id="info-card">
             <h3 id="card-title">Título</h3>
             <p id="card-desc">Descrição.</p>
-            <p class="hint">Use dois dedos para Zoom. Toque fora para sair.</p>
+            <p class="hint">1 Dedo: Gira | 2 Dedos: Arrasta e Zoom</p>
         </div>
     </div>
 
@@ -75,7 +75,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
-        // CONFIGURAÇÃO
         const testFile = {
             file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
             name: 'Bone Holding Forceps',
@@ -115,14 +114,20 @@
             renderer.outputEncoding = THREE.sRGBEncoding; 
             document.body.appendChild(renderer.domElement);
 
-            // Controles
+            // --- CONFIGURAÇÃO DE CONTROLES ATUALIZADA ---
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
+            controls.enableDamping = true; 
             controls.dampingFactor = 0.05;
-            controls.enablePan = false; 
-            controls.enableZoom = true; // Zoom liberado
+            
+            // HABILITADO: ARRASTO (PAN)
+            controls.enablePan = true; 
+            controls.screenSpacePanning = true; // Importante: Arrasta para cima/baixo na tela, não no chão 3D
+            controls.panSpeed = 1.0;
+
+            // HABILITADO: ZOOM
+            controls.enableZoom = true; 
             controls.minDistance = 2; 
-            controls.maxDistance = 20; 
+            controls.maxDistance = 30; 
             controls.maxPolarAngle = Math.PI / 2.1; 
 
             // Luzes
@@ -151,19 +156,17 @@
             
             window.addEventListener('resize', onResize);
 
-            // SISTEMA DE DETECÇÃO DE TOQUE INTELIGENTE
-            // Captura onde o dedo tocou pela primeira vez
+            // Detecção inteligente de clique vs arrasto
             renderer.domElement.addEventListener('pointerdown', (e) => {
                 touchStartX = e.clientX;
                 touchStartY = e.clientY;
             });
 
-            // Só processa o clique se soltar o dedo no mesmo lugar (não arrastou)
             renderer.domElement.addEventListener('pointerup', (e) => {
                 const diffX = Math.abs(e.clientX - touchStartX);
                 const diffY = Math.abs(e.clientY - touchStartY);
 
-                // Se moveu menos de 5 pixels, é um clique válido. Se mais, foi zoom/rotação.
+                // Se moveu pouco, é clique. Se moveu muito, é arrasto/pan.
                 if (diffX < 5 && diffY < 5) {
                     processClick(e);
                 }
@@ -227,11 +230,10 @@
             const intersects = raycaster.intersectObjects([loadedObject], true);
 
             if (intersects.length > 0) {
-                // CLICOU NO OBJETO
+                // Se clicar no objeto
                 if (!isInspecting) enterInspection();
             } else {
-                // CLICOU NO VAZIO
-                // Só sai se já estiver inspecionando
+                // Se clicar fora
                 if (isInspecting) exitInspection();
             }
         }
@@ -264,10 +266,12 @@
             tableMesh.visible = true;
             scene.background = new THREE.Color(0x1a1a1a);
 
+            // Reseta posição do objeto
             loadedObject.position.set(0, loadedObject.userData.baseY, 0);
             loadedObject.rotation.x = loadedObject.userData.baseRotX;
             loadedObject.rotation.z = 0;
 
+            // Reseta Câmera para a Mesa
             targetPos.copy(CAM_TABLE);
             targetLookAt.set(0, 0, 0);
 
@@ -286,13 +290,19 @@
             requestAnimationFrame(animate);
             
             if (isTransitioning) {
+                // Transição Suave
                 camera.position.lerp(targetPos, 0.1);
                 controls.target.lerp(targetLookAt, 0.1);
                 
+                // Se chegou perto, libera o controle para o usuário
                 if (camera.position.distanceTo(targetPos) < 0.1) {
                     isTransitioning = false; 
+                    // Garante que o alvo do controle esteja exatamente no centro
+                    if(isInspecting) controls.target.set(0,0,0);
+                    else controls.target.set(0,0,0);
                 }
             } else {
+                // Controle Manual (Dedo do Usuário)
                 controls.update();
             }
 
