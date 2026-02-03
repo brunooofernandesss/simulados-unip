@@ -1,300 +1,303 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Mesa Cirúrgica – Visualizador Profissional</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Inspeção Estável com Zoom</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
+        
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column;
+            z-index: 10;
+        }
 
-<style>
-body {
-    margin: 0;
-    overflow: hidden;
-    background: #0f0f0f;
-    font-family: "Segoe UI", system-ui, sans-serif;
-}
+        #header {
+            background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+            color: #fff; padding: 20px; text-align: center; pointer-events: auto;
+            transition: opacity 0.5s;
+        }
+        
+        #info-card {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px;
+            background: rgba(10, 10, 10, 0.9); 
+            border-top: 3px solid #4CAF50;
+            backdrop-filter: blur(10px);
+            color: #fff; padding: 20px; border-radius: 8px;
+            display: none; 
+            box-shadow: 0 10px 50px rgba(0,0,0,1);
+            pointer-events: auto;
+            text-align: center;
+        }
 
-/* UI */
-#ui {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 10;
-}
+        #info-card h3 { margin: 0 0 10px 0; color: #4CAF50; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        #info-card p { font-size: 15px; color: #ddd; line-height: 1.6; margin: 0; }
+        #info-card .hint { font-size: 11px; color: #666; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; }
 
-#topbar {
-    padding: 18px;
-    text-align: center;
-    background: linear-gradient(180deg, rgba(0,0,0,.85), transparent);
-    color: #eaeaea;
-    pointer-events: auto;
-}
-
-#topbar h2 {
-    margin: 0;
-    letter-spacing: 2px;
-    font-size: 18px;
-}
-
-#topbar span {
-    font-size: 11px;
-    color: #aaa;
-}
-
-#info {
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(92%, 420px);
-    background: rgba(12,12,12,.95);
-    border-top: 3px solid #2ecc71;
-    border-radius: 10px;
-    padding: 18px;
-    display: none;
-    pointer-events: auto;
-    box-shadow: 0 20px 50px rgba(0,0,0,.9);
-}
-
-#info h3 {
-    margin: 0 0 8px;
-    color: #2ecc71;
-    text-transform: uppercase;
-    font-size: 16px;
-}
-
-#info p {
-    font-size: 14px;
-    line-height: 1.6;
-    color: #ddd;
-}
-
-#hint {
-    font-size: 11px;
-    margin-top: 12px;
-    color: #777;
-}
-
-#back {
-    position: absolute;
-    top: 18px;
-    left: 18px;
-    pointer-events: auto;
-    background: rgba(255,255,255,.08);
-    color: white;
-    border: 1px solid rgba(255,255,255,.25);
-    padding: 8px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: none;
-}
-
-#loading {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    color: #2ecc71;
-    font-weight: bold;
-    background: #000;
-    z-index: 50;
-}
-</style>
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #4CAF50; font-size: 18px; font-weight: bold;
+            background: rgba(0,0,0,0.9); padding: 15px 30px; border-radius: 30px;
+            z-index: 50;
+        }
+        
+        #back-btn {
+            position: absolute; top: 20px; left: 20px; pointer-events: auto;
+            background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);
+            padding: 10px 15px; border-radius: 5px; cursor: pointer; display: none;
+            backdrop-filter: blur(5px);
+        }
+    </style>
 </head>
-
 <body>
 
-<div id="loading">CARREGANDO INSTRUMENTOS...</div>
+    <div id="loading">CARREGANDO...</div>
 
-<div id="ui">
-    <div id="topbar">
-        <h2>MESA DE INSTRUMENTAÇÃO</h2>
-        <span>Toque em um instrumento para inspeção</span>
+    <div id="ui-layer">
+        <div id="header">
+            <h2>MESA DE INSTRUMENTAÇÃO</h2>
+            <p style="margin:0; font-size:12px; color:#888;">Toque para inspecionar</p>
+        </div>
+        
+        <button id="back-btn" onclick="exitInspection()">⬅ VOLTAR</button>
+
+        <div id="info-card">
+            <h3 id="card-title">Título</h3>
+            <p id="card-desc">Descrição.</p>
+            <p class="hint">Use dois dedos para Zoom. Toque fora para sair.</p>
+        </div>
     </div>
 
-    <button id="back">⬅ VOLTAR</button>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-    <div id="info">
-        <h3 id="info-title"></h3>
-        <p id="info-desc"></p>
-        <div id="hint">Use dois dedos para zoom</div>
-    </div>
-</div>
+    <script>
+        // CONFIGURAÇÃO
+        const testFile = {
+            file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
+            name: 'Bone Holding Forceps',
+            desc: 'Pinça de redução óssea utilizada para segurar fragmentos durante cirurgias ortopédicas. Note a cremalheira para travamento firme.'
+        };
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+        const CAM_TABLE = new THREE.Vector3(0, 15, 10); 
+        const CAM_INSPECT = new THREE.Vector3(0, 5, 8); 
 
-<script>
-/* ================= CONFIG ================= */
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let loadedObject = null;
+        let tableMesh = null;
+        
+        let isInspecting = false; 
+        let isTransitioning = false;
+        let targetPos = new THREE.Vector3();
+        let targetLookAt = new THREE.Vector3();
 
-const instruments = [
-{
-    file: "Leo Bone Holding Forceps 1 SharpFusion.glb",
-    name: "Bone Holding Forceps",
-    desc: "Pinça de redução óssea usada para estabilização de fragmentos durante cirurgias ortopédicas. Possui cremalheira para travamento firme."
-}
-];
+        // Variáveis para diferenciar Clique de Arrasto
+        let touchStartX = 0;
+        let touchStartY = 0;
 
-const CAM_TABLE = new THREE.Vector3(0, 14, 12);
-const CAM_INSPECT = new THREE.Vector3(0, 4, 7);
+        init();
+        animate();
 
-/* ================= CORE ================= */
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.copy(CAM_TABLE);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.outputEncoding = THREE.sRGBEncoding; 
+            document.body.appendChild(renderer.domElement);
 
-let scene, camera, renderer, controls;
-let raycaster = new THREE.Raycaster();
-let mouse = new THREE.Vector2();
+            // Controles
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enablePan = false; 
+            controls.enableZoom = true; // Zoom liberado
+            controls.minDistance = 2; 
+            controls.maxDistance = 20; 
+            controls.maxPolarAngle = Math.PI / 2.1; 
 
-let objects = [];
-let current = null;
-let inspecting = false;
-let transitioning = false;
-let targetCam = new THREE.Vector3();
-let targetLook = new THREE.Vector3();
+            // Luzes
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
+            const mainLight = new THREE.SpotLight(0xffffff, 1.2);
+            mainLight.position.set(5, 20, 10);
+            mainLight.castShadow = true;
+            scene.add(mainLight);
+            const rimLight = new THREE.PointLight(0x4455ff, 0.5);
+            rimLight.position.set(-5, 0, -5);
+            scene.add(rimLight);
 
-/* ================= INIT ================= */
+            // Mesa
+            const tableGeo = new THREE.PlaneGeometry(40, 40);
+            const tableMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });
+            tableMesh = new THREE.Mesh(tableGeo, tableMat);
+            tableMesh.rotation.x = -Math.PI / 2;
+            tableMesh.receiveShadow = true;
+            scene.add(tableMesh);
 
-init();
-animate();
+            loadModel();
 
-function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f0f0f);
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            window.addEventListener('resize', onResize);
 
-    camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
-    camera.position.copy(CAM_TABLE);
+            // SISTEMA DE DETECÇÃO DE TOQUE INTELIGENTE
+            // Captura onde o dedo tocou pela primeira vez
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                touchStartX = e.clientX;
+                touchStartY = e.clientY;
+            });
 
-    renderer = new THREE.WebGLRenderer({ antialias:true });
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-    renderer.shadowMap.enabled = true;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    document.body.appendChild(renderer.domElement);
+            // Só processa o clique se soltar o dedo no mesmo lugar (não arrastou)
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                const diffX = Math.abs(e.clientX - touchStartX);
+                const diffY = Math.abs(e.clientY - touchStartY);
 
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.enablePan = false;
-    controls.minDistance = 2;
-    controls.maxDistance = 20;
-    controls.maxPolarAngle = Math.PI / 2.05;
-
-    /* Luz cirúrgica */
-    scene.add(new THREE.AmbientLight(0xffffff,.4));
-
-    const spot = new THREE.SpotLight(0xffffff,1.4);
-    spot.position.set(5,18,8);
-    spot.castShadow = true;
-    scene.add(spot);
-
-    const rim = new THREE.PointLight(0x3366ff,.4);
-    rim.position.set(-6,4,-6);
-    scene.add(rim);
-
-    /* Mesa */
-    const table = new THREE.Mesh(
-        new THREE.PlaneGeometry(40,40),
-        new THREE.MeshStandardMaterial({color:0x2f7f5f, roughness:.9})
-    );
-    table.rotation.x = -Math.PI/2;
-    table.receiveShadow = true;
-    scene.add(table);
-
-    loadInstruments();
-
-    window.addEventListener("resize", onResize);
-    window.addEventListener("pointerup", onClick);
-    document.getElementById("back").onclick = exitInspection;
-}
-
-function loadInstruments() {
-    const loader = new THREE.GLTFLoader();
-
-    loader.load("./models/"+instruments[0].file, gltf=>{
-        const obj = gltf.scene;
-        normalize(obj);
-        scene.add(obj);
-        objects.push({ mesh: obj, data: instruments[0] });
-        document.getElementById("loading").style.display="none";
-    });
-}
-
-function normalize(model) {
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const scale = 6 / Math.max(size.x,size.y,size.z);
-    model.scale.setScalar(scale);
-
-    model.position.y = -box.min.y * scale + .1;
-    model.rotation.x = -Math.PI/2;
-
-    model.traverse(m=>{
-        if(m.isMesh){
-            m.castShadow = true;
-            m.material.metalness = .7;
-            m.material.roughness = .3;
+                // Se moveu menos de 5 pixels, é um clique válido. Se mais, foi zoom/rotação.
+                if (diffX < 5 && diffY < 5) {
+                    processClick(e);
+                }
+            });
         }
-    });
-}
 
-function onClick(e){
-    if(transitioning) return;
+        function loadModel() {
+            const loader = new THREE.GLTFLoader();
+            const path = './models/' + testFile.file;
 
-    mouse.x = (e.clientX/innerWidth)*2-1;
-    mouse.y = -(e.clientY/innerHeight)*2+1;
-    raycaster.setFromCamera(mouse,camera);
+            loader.load(path, function (gltf) {
+                const model = gltf.scene;
+                
+                model.rotation.x = -Math.PI / 2;
+                
+                const boxTemp = new THREE.Box3().setFromObject(model);
+                const sizeTemp = new THREE.Vector3();
+                boxTemp.getSize(sizeTemp);
+                const maxDim = Math.max(sizeTemp.x, sizeTemp.y, sizeTemp.z);
+                const scaleFactor = 6.0 / maxDim; 
+                model.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-    const hits = raycaster.intersectObjects(objects.map(o=>o.mesh),true);
-    if(hits.length && !inspecting){
-        enterInspection(objects[0]);
-    } else if(inspecting){
-        exitInspection();
-    }
-}
+                model.updateMatrixWorld(true); 
+                const boxFinal = new THREE.Box3().setFromObject(model);
+                const bottomY = boxFinal.min.y;
+                const liftHeight = -bottomY + 0.1;
+                
+                model.position.y = liftHeight;
 
-function enterInspection(obj){
-    inspecting = true;
-    transitioning = true;
-    current = obj;
+                model.userData.baseY = liftHeight;
+                model.userData.baseRotX = model.rotation.x;
 
-    obj.mesh.position.set(0,0,0);
-    obj.mesh.rotation.set(0,0,0);
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        child.material.metalness = 0.7;
+                        child.material.roughness = 0.3;
+                    }
+                });
 
-    targetCam.copy(CAM_INSPECT);
-    targetLook.set(0,0,0);
+                scene.add(model);
+                loadedObject = model;
+                
+                document.getElementById('loading').style.display = 'none';
 
-    document.getElementById("info").style.display="block";
-    document.getElementById("back").style.display="block";
-    document.getElementById("info-title").innerText=obj.data.name;
-    document.getElementById("info-desc").innerText=obj.data.desc;
-}
+            }, undefined, function (error) {
+                console.error(error);
+                document.getElementById('loading').innerText = "ERRO: Arquivo não encontrado.";
+                document.getElementById('loading').style.color = "red";
+            });
+        }
 
-function exitInspection(){
-    inspecting=false;
-    transitioning=true;
+        function processClick(event) {
+            if(!loadedObject || isTransitioning) return;
 
-    targetCam.copy(CAM_TABLE);
-    targetLook.set(0,0,0);
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects([loadedObject], true);
 
-    document.getElementById("info").style.display="none";
-    document.getElementById("back").style.display="none";
-}
+            if (intersects.length > 0) {
+                // CLICOU NO OBJETO
+                if (!isInspecting) enterInspection();
+            } else {
+                // CLICOU NO VAZIO
+                // Só sai se já estiver inspecionando
+                if (isInspecting) exitInspection();
+            }
+        }
 
-function animate(){
-    requestAnimationFrame(animate);
+        function enterInspection() {
+            isInspecting = true;
+            isTransitioning = true; 
 
-    if(transitioning){
-        camera.position.lerp(targetCam,.08);
-        controls.target.lerp(targetLook,.08);
-        if(camera.position.distanceTo(targetCam)<.1) transitioning=false;
-    } else controls.update();
+            tableMesh.visible = false;
+            scene.background = new THREE.Color(0x050505);
 
-    renderer.render(scene,camera);
-}
+            loadedObject.position.set(0, 0, 0);
+            loadedObject.rotation.x = 0; 
+            loadedObject.rotation.z = Math.PI / 6;
 
-function onResize(){
-    camera.aspect=innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth,innerHeight);
-}
-</script>
+            targetPos.copy(CAM_INSPECT);
+            targetLookAt.set(0, 0, 0);
+
+            document.getElementById('info-card').style.display = 'block';
+            document.getElementById('header').style.opacity = '0';
+            document.getElementById('back-btn').style.display = 'block';
+            document.getElementById('card-title').innerText = testFile.name;
+            document.getElementById('card-desc').innerText = testFile.desc;
+        }
+
+        function exitInspection() {
+            isInspecting = false;
+            isTransitioning = true; 
+
+            tableMesh.visible = true;
+            scene.background = new THREE.Color(0x1a1a1a);
+
+            loadedObject.position.set(0, loadedObject.userData.baseY, 0);
+            loadedObject.rotation.x = loadedObject.userData.baseRotX;
+            loadedObject.rotation.z = 0;
+
+            targetPos.copy(CAM_TABLE);
+            targetLookAt.set(0, 0, 0);
+
+            document.getElementById('info-card').style.display = 'none';
+            document.getElementById('header').style.opacity = '1';
+            document.getElementById('back-btn').style.display = 'none';
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (isTransitioning) {
+                camera.position.lerp(targetPos, 0.1);
+                controls.target.lerp(targetLookAt, 0.1);
+                
+                if (camera.position.distanceTo(targetPos) < 0.1) {
+                    isTransitioning = false; 
+                }
+            } else {
+                controls.update();
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
 </body>
 </html>
