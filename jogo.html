@@ -71,7 +71,7 @@
 
         const manager = new THREE.LoadingManager();
         manager.onLoad = function ( ) { 
-            loadingEl.style.display = 'none'; // Esconde tela de carregamento
+            loadingEl.style.display = 'none'; // Esconde tela de carregamento quando pronto
             init(); 
             createScissors(); 
             initGUI(); 
@@ -106,7 +106,7 @@
             renderer.toneMappingExposure = 1.0;
             document.body.appendChild(renderer.domElement);
 
-            // ILUMINAÇÃO REFORÇADA (Para evitar tela preta se texturas falharem)
+            // ILUMINAÇÃO REFORÇADA (Para garantir que nada fique preto)
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
             scene.add(ambientLight);
             
