@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de Sutura com Ajuste Manual</title>
+    <title>Simulador de Sutura - Visão Completa</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; }
         #info {
@@ -14,20 +14,18 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; font-size: 24px; z-index: 20;
         }
-        /* Painel para os controles manuais */
         #gui-container { position: absolute; top: 10px; right: 10px; z-index: 30; }
-        
-        #reset-btn-container { position: absolute; top: 150px; right: 10px; z-index: 30; }
+        #reset-btn-container { position: absolute; top: 200px; right: 10px; z-index: 30; } /* Baixei o botão para não tapar o menu */
         button { padding: 8px 15px; cursor: pointer; background: #444; color: #fff; border: 1px solid #666; }
     </style>
 </head>
 <body>
     <div id="info">
-        <h2>Simulador com Ajuste Manual de Textura</h2>
-        <p>Use os controles à direita para centralizar o corte.</p>
-        <p>Depois, clique nas bordas para suturar. Pontos: <span id="stitch-count">0</span></p>
+        <h2>Simulador de Sutura (Controlo Total)</h2>
+        <p>Ajuste a imagem e o zoom no menu à direita.</p>
+        <p>Clique nas bordas para suturar. Pontos: <span id="stitch-count">0</span></p>
     </div>
-    <div id="loading">Carregando texturas e gerando malha...</div>
+    <div id="loading">Carregando texturas...</div>
     
     <div id="gui-container"></div>
     
@@ -46,10 +44,11 @@
         let stitchCount = 0;
         let originalPositions;
 
-        // --- Configurações para o Painel de Ajuste Manual ---
-        const textureSettings = {
-            offsetX: 0.0, // Posição Horizontal inicial
-            offsetY: 0.0  // Posição Vertical inicial
+        // --- Configurações do Painel ---
+        const settings = {
+            offsetX: 0.0,
+            offsetY: 0.0,
+            zoomLevel: 18 // Começa mais longe para ver tudo
         };
         let gui;
 
@@ -57,15 +56,15 @@
         manager.onLoad = function ( ) {
             document.getElementById('loading').style.display = 'none';
             init();
-            // Inicia o painel de controle após carregar tudo
             initGUI(); 
             animate();
         };
 
         const textureLoader = new THREE.TextureLoader(manager);
+        // ATENÇÃO: Mantenha as imagens 'pele_cor.jpg' e 'pele_normal.jpg' na pasta
         const colorTexture = textureLoader.load('pele_cor.jpg'); 
         const normalTexture = textureLoader.load('pele_normal.jpg');
-        // Configuração importante: a textura não deve repetir para o ajuste manual funcionar bem
+        
         colorTexture.wrapS = colorTexture.wrapT = THREE.ClampToEdgeWrapping;
         normalTexture.wrapS = normalTexture.wrapT = THREE.ClampToEdgeWrapping;
         colorTexture.minFilter = THREE.LinearFilter;
@@ -76,7 +75,7 @@
             scene.background = new THREE.Color(0x2a2a2a);
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 10, 5); 
+            updateCameraPosition(); // Define a posição inicial baseada no zoom
             camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -90,15 +89,15 @@
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
             const mainLight = new THREE.DirectionalLight(0xffffff, 1);
-            mainLight.position.set(2, 8, 5);
+            mainLight.position.set(2, 10, 5);
             mainLight.castShadow = true;
             mainLight.shadow.mapSize.set(2048, 2048);
             scene.add(mainLight);
             const fillLight = new THREE.PointLight(0xffeedd, 0.4);
-            fillLight.position.set(-5, 3, -5);
+            fillLight.position.set(-5, 5, -5);
             scene.add(fillLight);
 
-            // Pele com malha densa
+            // Pele (Geometry 12x12)
             const skinGeometry = new THREE.PlaneGeometry(12, 12, 80, 80); 
             originalPositions = Float32Array.from(skinGeometry.attributes.position.array);
 
@@ -120,7 +119,7 @@
             const needleMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 1.0, roughness: 0.1 });
             needleMesh = new THREE.Mesh(needleGeo, needleMat);
             needleMesh.rotation.x = Math.PI;
-            needleMesh.position.set(0, 2, 0);
+            needleMesh.position.set(0, 5, 0); // Começa alto
             needleMesh.castShadow = true;
             scene.add(needleMesh);
 
@@ -132,29 +131,31 @@
             window.addEventListener('mousemove', onMouseMove, false);
         }
 
-        // --- NOVA FUNÇÃO: Inicializa o Painel de Controle Manual ---
         function initGUI() {
-            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Ajuste de Textura' });
+            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Configurações' });
             
-            // Adiciona slider horizontal (X)
-            gui.add(textureSettings, 'offsetX', -0.5, 0.5, 0.01)
-                .name('Ajuste Horizontal (X)')
-                .onChange(updateTextureOffset);
+            // Pasta de Posição da Imagem
+            const folderImg = gui.addFolder('Posição da Imagem');
+            folderImg.add(settings, 'offsetX', -0.5, 0.5, 0.01).name('Horizontal (X)').onChange(updateTextureOffset);
+            folderImg.add(settings, 'offsetY', -0.5, 0.5, 0.01).name('Vertical (Y)').onChange(updateTextureOffset);
+            
+            // Pasta de Câmara
+            const folderCam = gui.addFolder('Câmara');
+            // Zoom de 5 (muito perto) a 30 (muito longe)
+            folderCam.add(settings, 'zoomLevel', 5, 30, 0.5).name('Zoom (Distância)').onChange(updateCameraPosition);
 
-            // Adiciona slider vertical (Y)
-            gui.add(textureSettings, 'offsetY', -0.5, 0.5, 0.01)
-                .name('Ajuste Vertical (Y)')
-                .onChange(updateTextureOffset);
-
-            // Aplica os valores iniciais (0,0)
             updateTextureOffset();
         }
 
-        // Função chamada sempre que movemos os sliders
         function updateTextureOffset() {
-            // Aplica o deslocamento (offset) em ambas as texturas para manterem a sincronia
-            colorTexture.offset.set(textureSettings.offsetX, textureSettings.offsetY);
-            normalTexture.offset.set(textureSettings.offsetX, textureSettings.offsetY);
+            colorTexture.offset.set(settings.offsetX, settings.offsetY);
+            normalTexture.offset.set(settings.offsetX, settings.offsetY);
+        }
+
+        function updateCameraPosition() {
+            // Mantém o ângulo, muda a altura e distância proporcionalmente
+            camera.position.set(0, settings.zoomLevel, settings.zoomLevel * 0.4);
+            camera.lookAt(0, 0, 0);
         }
 
         function onMouseMove(event) {
@@ -164,12 +165,12 @@
             const intersects = raycaster.intersectObject(skinMesh);
             if (intersects.length > 0) {
                 const point = intersects[0].point;
-                needleMesh.position.set(point.x, point.y + 0.6, point.z);
+                // Ajusta altura da agulha visualmente
+                needleMesh.position.set(point.x, point.y + 1.0, point.z);
             }
         }
 
         function onMouseClick(event) {
-            // Evita cliques se estiver mexendo no painel GUI ou botão reset
             if (event.target.closest('.lil-gui') || event.target.tagName === 'BUTTON') return;
 
             raycaster.setFromCamera(mouse, camera);
@@ -190,8 +191,7 @@
             } else {
                 createThread(startPoint, point);
                 
-                // Lógica de aproximação (deformação)
-                // Importante: só funciona bem se o corte estiver centralizado no X=0
+                // Lógica de Deformação
                 if(startPoint.x < 0 && point.x > 0) {
                      pullSkinVertices(startPoint, 'left');
                      pullSkinVertices(point, 'right');
@@ -232,14 +232,13 @@
                     const falloff = Math.pow(1.0 - (distance / influenceRadius), 2);
                     const moveAmount = falloff * pullStrength;
 
-                    // Aproximação em direção ao centro (X=0)
                     if (side === 'left' && vX < 0) {
                          positions[ix] = Math.min(-0.05, vX + moveAmount);
                     } 
                     else if (side === 'right' && vX > 0) {
                          positions[ix] = Math.max(0.05, vX - moveAmount);
                     }
-                    positions[iz] += moveAmount * 0.1; // Leve elevação
+                    positions[iz] += moveAmount * 0.1; 
                 }
             }
             skinMesh.geometry.attributes.position.needsUpdate = true;
@@ -247,7 +246,7 @@
         }
 
         function createPunctureDot(point) {
-            const dotGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const dotGeo = new THREE.SphereGeometry(0.06, 8, 8); // Ponto um pouco maior
             const dotMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
             const dot = new THREE.Mesh(dotGeo, dotMat);
             dot.position.copy(point);
@@ -269,8 +268,8 @@
         }
 
         function animateNeedleSpecific(targetPos, callback) {
-            const startY = 0.6; const endY = -0.1; 
-            let down = true; let speed = 0.15; 
+            const startY = 1.0; const endY = -0.1; 
+            let down = true; let speed = 0.2; 
             needleMesh.position.x = targetPos.x; needleMesh.position.z = targetPos.z;
             const needleAnimation = setInterval(() => {
                 if (down) {
