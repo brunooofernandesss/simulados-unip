@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Teste Unitário - Auto Ajuste</title>
+    <title>Teste Final - Inspeção Estável</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
             display: flex; flex-direction: column;
+            z-index: 10; /* Garante que a UI fique sobre o 3D */
         }
 
         #header {
@@ -23,42 +24,44 @@
             border-left: 4px solid #4CAF50;
             backdrop-filter: blur(10px);
             color: #fff; padding: 20px; border-radius: 4px;
-            display: none; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none; /* Começa oculto */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             pointer-events: auto;
+            z-index: 20; /* Garante visibilidade máxima */
         }
 
-        #info-card h3 { margin: 0 0 5px 0; color: #4CAF50; font-size: 18px; }
-        #info-card p { font-size: 14px; color: #ccc; line-height: 1.5; }
+        #info-card h3 { margin: 0 0 10px 0; color: #4CAF50; font-size: 18px; text-transform: uppercase; }
+        #info-card p { font-size: 14px; color: #ddd; line-height: 1.5; margin: 0; }
 
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #4CAF50; font-size: 18px; font-weight: bold;
-            background: rgba(0,0,0,0.8); padding: 15px 30px; border-radius: 30px;
+            background: rgba(0,0,0,0.9); padding: 15px 30px; border-radius: 30px;
+            z-index: 50;
         }
         
-        /* Botão extra para resetar se precisar */
         #reset-btn {
             position: absolute; top: 20px; right: 20px; pointer-events: auto;
-            background: #333; color: white; border: 1px solid #555; padding: 10px; cursor: pointer;
+            background: #333; color: white; border: 1px solid #555; padding: 10px 20px; 
+            cursor: pointer; border-radius: 5px; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <div id="loading">CARREGANDO E CALCULANDO ALTURA...</div>
+    <div id="loading">CARREGANDO...</div>
 
     <div id="ui-layer">
         <div id="header">
-            <h2>TESTE: ALINHAMENTO AUTOMÁTICO</h2>
-            <p style="color: #888; margin: 0;">O objeto deve aparecer SOBRE a mesa</p>
+            <h2>VISUALIZADOR DE STL</h2>
+            <p style="color: #aaa; margin: 0;">Toque no objeto para inspecionar</p>
         </div>
         
-        <button id="reset-btn" onclick="resetCamera()">Recentralizar Câmera</button>
+        <button id="reset-btn" onclick="resetCamera()">Resetar Câmera</button>
 
         <div id="info-card">
-            <h3 id="card-title">Nome</h3>
-            <p id="card-desc">Descrição...</p>
+            <h3 id="card-title">Título</h3>
+            <p id="card-desc">Descrição.</p>
         </div>
     </div>
 
@@ -67,15 +70,16 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
-        // CONFIGURAÇÃO
+        // --- DADOS DO INSTRUMENTO ---
         const testFile = {
             file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
             name: 'Bone Holding Forceps',
-            desc: 'Pinça de redução óssea. Note como ela agora "pousa" corretamente sobre a superfície.'
+            desc: 'Pinça de redução óssea utilizada para segurar fragmentos durante cirurgias ortopédicas. Note a cremalheira para travamento firme.'
         };
 
         let scene, camera, renderer, controls, raycaster, mouse;
         let loadedObject = null;
+        let isInspecting = false; // Estado: está inspecionando ou na mesa?
 
         init();
         animate();
@@ -84,11 +88,9 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x222222);
             
-            // Câmera posicionada mais alto para garantir que você veja a mesa de cima
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 15, 10);
-            camera.lookAt(0, 0, 0);
-
+            
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -98,7 +100,8 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
-            controls.maxPolarAngle = Math.PI / 2.1; // Impede que a câmera vá para baixo da mesa
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2.1; // Trava o chão
 
             // Luzes
             const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -108,9 +111,9 @@
             dirLight.castShadow = true;
             scene.add(dirLight);
 
-            // Mesa Verde
+            // Mesa
             const tableGeo = new THREE.PlaneGeometry(30, 30);
-            const tableMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.8 });
+            const tableMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });
             const table = new THREE.Mesh(tableGeo, tableMat);
             table.rotation.x = -Math.PI / 2;
             table.receiveShadow = true;
@@ -120,7 +123,9 @@
 
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
+            
             window.addEventListener('resize', onResize);
+            // Usando 'pointerup' para funcionar bem em touch e mouse
             window.addEventListener('pointerup', onClick);
         }
 
@@ -131,29 +136,31 @@
             loader.load(path, function (gltf) {
                 const model = gltf.scene;
                 
-                // 1. Aplica a rotação inicial (Deitado)
+                // 1. Rotação Inicial (Deitado)
                 model.rotation.x = -Math.PI / 2;
                 
-                // 2. Ajusta Escala (Normalização)
+                // 2. Escala Normalizada
                 const boxTemp = new THREE.Box3().setFromObject(model);
                 const sizeTemp = new THREE.Vector3();
                 boxTemp.getSize(sizeTemp);
                 const maxDim = Math.max(sizeTemp.x, sizeTemp.y, sizeTemp.z);
-                const scaleFactor = 5.0 / maxDim; // Aumentei um pouco para 5.0 ficar bem visível
+                const scaleFactor = 6.0 / maxDim; // Tamanho 6.0 para boa visibilidade
                 model.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-                // 3. O SEGREDO: Correção Automática de Altura (Bounding Box)
-                // Atualiza o mundo para que a rotação e escala acima tenham efeito no cálculo
+                // 3. Ajuste de Altura (Bounding Box)
                 model.updateMatrixWorld(true); 
-                
                 const boxFinal = new THREE.Box3().setFromObject(model);
-                const bottomY = boxFinal.min.y; // Pega o ponto mais baixo do objeto no mundo 3D
+                const bottomY = boxFinal.min.y;
                 
-                // Se o ponto mais baixo for -2, precisamos subir +2.
-                // Adicionamos +0.1 para ele flutuar levemente e não "brigar" com a textura da mesa (Z-fighting)
-                const liftHeight = -bottomY + 0.1;
+                // Calcula a altura exata para tocar a mesa
+                const tableLevel = 0; 
+                const liftHeight = tableLevel - bottomY + 0.1; // +0.1 de margem
                 
                 model.position.y = liftHeight;
+
+                // SALVA A POSIÇÃO ORIGINAL NA MEMÓRIA DO OBJETO
+                model.userData.baseY = liftHeight;
+                model.userData.baseRotX = model.rotation.x;
 
                 // Materiais
                 model.traverse((child) => {
@@ -172,45 +179,60 @@
 
             }, undefined, function (error) {
                 console.error(error);
-                document.getElementById('loading').innerText = "ERRO: Arquivo não encontrado!";
+                document.getElementById('loading').innerText = "ERRO: Arquivo não encontrado.";
+                document.getElementById('loading').style.color = "red";
             });
         }
 
         function onClick(event) {
             if(!loadedObject) return;
-            // Detecta clique (lógica simplificada)
+
+            // Evita cliques se estiver arrastando a câmera
+            // (Lógica simples: se o mouse moveu muito pouco, é clique)
+            
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects([loadedObject], true);
 
             if (intersects.length > 0) {
-                // Pulo
-                // Para pular, pegamos a altura base (calculada antes) e somamos
-                const currentY = loadedObject.position.y;
-                if(currentY < 2) { // Se estiver na mesa
-                     loadedObject.userData.baseY = currentY; // Salva onde ele estava
-                     loadedObject.position.y = 4.0;
-                     loadedObject.rotation.z += 0.5;
-                     loadedObject.rotation.x = 0; // Fica em pé
-                     
-                     document.getElementById('info-card').style.display = 'block';
-                     document.getElementById('card-title').innerText = testFile.name;
-                     document.getElementById('card-desc').innerText = testFile.desc;
-                }
+                toggleInspection();
             } else {
-                // Volta pra mesa
-                if(loadedObject.userData.baseY !== undefined) {
-                    loadedObject.position.y = loadedObject.userData.baseY;
-                } else {
-                     // Recalcula se perder a ref (fallback seguro)
-                     const box = new THREE.Box3().setFromObject(loadedObject);
-                     // Aproximação segura
-                     loadedObject.position.y = (box.max.y - box.min.y) / 2; 
-                }
+                // Se clicar fora, cancela inspeção
+                if(isInspecting) toggleInspection();
+            }
+        }
+
+        function toggleInspection() {
+            isInspecting = !isInspecting;
+            const card = document.getElementById('info-card');
+
+            if (isInspecting) {
+                // --- MODO INSPEÇÃO (ZOOM) ---
+                // Sobe a partir da base salva (+ 4 unidades)
+                loadedObject.position.y = loadedObject.userData.baseY + 4.0;
                 
-                loadedObject.rotation.x = -Math.PI / 2; // Deita de novo
-                document.getElementById('info-card').style.display = 'none';
+                // Levanta o instrumento (Fica em pé)
+                loadedObject.rotation.x = 0; 
+                loadedObject.rotation.z = Math.PI / 4; // Leve inclinação lateral
+
+                // Mostra Descrição
+                card.style.display = 'block';
+                document.getElementById('card-title').innerText = testFile.name;
+                document.getElementById('card-desc').innerText = testFile.desc;
+
+            } else {
+                // --- MODO MESA (REPOUSO) ---
+                // Volta para a altura exata salva
+                loadedObject.position.y = loadedObject.userData.baseY;
+                
+                // Volta a deitar
+                loadedObject.rotation.x = loadedObject.userData.baseRotX;
+                loadedObject.rotation.z = 0;
+
+                // Esconde Descrição
+                card.style.display = 'none';
             }
         }
 
@@ -228,6 +250,7 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            // REMOVIDO: loadedObject.rotation.y += ... (Isso causava a órbita indesejada)
             controls.update();
             renderer.render(scene, camera);
         }
