@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Simulador Sutura HD (Ponto Simples)</title>
+    <title>Simulador Sutura - Correção de Textura</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #1a1a1a; }
         #info {
@@ -23,8 +23,8 @@
 </head>
 <body>
     <div id="info">
-        <h3>Simulador HD - Ponto Simples</h3>
-        <p>Ajuste o zoom. Clique PRÓXIMO à borda para suturar.</p>
+        <h3>Simulador Realista (Silicone)</h3>
+        <p>Ajuste o zoom. Clique perto da borda para suturar.</p>
         <p>Pontos: <span id="stitch-count">0</span></p>
     </div>
     
@@ -45,12 +45,12 @@
         let stitchCount = 0;
         let originalPositions;
 
-        // Configurações
         const settings = {
             offsetX: 0.0,
             offsetY: 0.0,
-            zoomLevel: 10, // Zoom inicial mais próximo para ver detalhes
-            lightIntensity: 1.2
+            zoomLevel: 10,
+            // Adicionei controle de relevo para você ajustar se precisar
+            normalScale: 0.3 
         };
         let gui;
 
@@ -58,63 +58,77 @@
         manager.onLoad = function ( ) { init(); initGUI(); animate(); };
 
         const textureLoader = new THREE.TextureLoader(manager);
-        // Filtro Anisotrópico melhora a qualidade da textura em ângulos inclinados
-        const maxAnisotropy = 16; 
-
+        
+        // Carregando texturas
         const colorTexture = textureLoader.load('pele_cor.jpg', (t) => {
-            t.anisotropy = maxAnisotropy;
             t.minFilter = THREE.LinearFilter;
             t.magFilter = THREE.LinearFilter;
             t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+            // Correção de cor: garante que a cor não fique "lavada"
+            t.encoding = THREE.sRGBEncoding; 
         }); 
+        
         const normalTexture = textureLoader.load('pele_normal.jpg', (t) => {
-            t.anisotropy = maxAnisotropy;
             t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
         });
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x222222);
+            scene.background = new THREE.Color(0x111111); // Fundo quase preto para foco total na pele
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             updateCameraPosition(); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-            
-            // --- CORREÇÃO DE DEFINIÇÃO ---
-            // Isso força o renderizador a usar a densidade real de pixels do dispositivo (celular/tablet)
             renderer.setPixelRatio(window.devicePixelRatio); 
             renderer.setSize(window.innerWidth, window.innerHeight);
-            
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             renderer.outputEncoding = THREE.sRGBEncoding;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cores mais realistas
+            
+            // Tone Mapping mais suave para manter as cores vivas
+            renderer.toneMapping = THREE.ReinhardToneMapping; 
+            renderer.toneMappingExposure = 2.5; // Exposição controlada
+            
             document.body.appendChild(renderer.domElement);
 
-            // Luzes
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            // --- ILUMINAÇÃO CORRIGIDA (Mais quente e suave) ---
+            
+            // Luz ambiente mais forte para clarear as sombras da incisão
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
             scene.add(ambientLight);
             
-            const mainLight = new THREE.DirectionalLight(0xffffff, settings.lightIntensity);
-            mainLight.position.set(5, 15, 5);
+            // Luz principal levemente amarelada (Solar/Incandescente)
+            const mainLight = new THREE.DirectionalLight(0xfff0dd, 0.7); 
+            mainLight.position.set(2, 10, 2);
             mainLight.castShadow = true;
-            mainLight.shadow.bias = -0.0001;
-            mainLight.shadow.mapSize.set(2048, 2048); // Sombra nítida
+            mainLight.shadow.bias = -0.0005; // Remove artefatos de sombra (striping)
+            mainLight.shadow.mapSize.set(2048, 2048);
             scene.add(mainLight);
 
-            // --- PELE DE ALTA DENSIDADE ---
-            // 150x150 cria vértices suficientes para deformar só a borda do corte
-            // Reduzi o tamanho total de 12 para 10 para aumentar a densidade de pixels por unidade
+            // Luz de preenchimento suave
+            const fillLight = new THREE.PointLight(0xcceeff, 0.3);
+            fillLight.position.set(-5, 5, -5);
+            scene.add(fillLight);
+
+            // --- MATERIAL DE SILICONE ---
             const skinGeometry = new THREE.PlaneGeometry(10, 10, 150, 150); 
             originalPositions = Float32Array.from(skinGeometry.attributes.position.array);
 
             const skinMaterial = new THREE.MeshStandardMaterial({ 
                 map: colorTexture,
                 normalMap: normalTexture,
-                normalScale: new THREE.Vector2(1.0, 1.0),
-                roughness: 0.6, 
-                metalness: 0.1, 
+                
+                // AQUI ESTÁ A MÁGICA:
+                // Normal Scale 0.3 = Relevo suave, não parece lixa.
+                normalScale: new THREE.Vector2(0.3, 0.3), 
+                
+                // Roughness 0.4 = Levemente brilhante (silicone), não fosco (papel)
+                roughness: 0.4, 
+                
+                // Metalness 0.0 = Plástico/Borracha
+                metalness: 0.0, 
+                
                 side: THREE.DoubleSide
             });
 
@@ -125,7 +139,7 @@
             scene.add(skinMesh);
 
             // Agulha
-            const needleGeo = new THREE.ConeGeometry(0.04, 0.8, 16); // Agulha mais fina
+            const needleGeo = new THREE.ConeGeometry(0.04, 0.8, 16);
             const needleMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.9, roughness: 0.2 });
             needleMesh = new THREE.Mesh(needleGeo, needleMat);
             needleMesh.rotation.x = Math.PI;
@@ -137,17 +151,21 @@
             mouse = new THREE.Vector2();
 
             window.addEventListener('resize', onWindowResize, false);
-            // Suporte para Touch e Mouse
             window.addEventListener('pointerup', onMouseClick, false); 
             window.addEventListener('pointermove', onMouseMove, false);
         }
 
         function initGUI() {
-            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Configurações' });
+            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Ajustes' });
             
             gui.add(settings, 'offsetX', -0.5, 0.5, 0.001).name('Posição X').onChange(updateTextureOffset);
             gui.add(settings, 'offsetY', -0.5, 0.5, 0.001).name('Posição Y').onChange(updateTextureOffset);
             gui.add(settings, 'zoomLevel', 2, 20, 0.5).name('Zoom').onChange(updateCameraPosition);
+            
+            // Adicionei este slider para você controlar a "rugosidade" ao vivo
+            gui.add(settings, 'normalScale', 0.0, 2.0, 0.1).name('Textura (Relevo)').onChange((val) => {
+                skinMesh.material.normalScale.set(val, val);
+            });
             
             updateTextureOffset();
         }
@@ -163,7 +181,6 @@
         }
 
         function onMouseMove(event) {
-            // Normaliza coordenadas do mouse/touch
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             
@@ -172,7 +189,6 @@
             
             if (intersects.length > 0) {
                 const point = intersects[0].point;
-                // Agulha paira sobre a pele
                 needleMesh.position.set(point.x, point.y + 0.5, point.z);
             }
         }
@@ -193,15 +209,10 @@
 
         function handleSutureLogic(point) {
             createPunctureDot(point);
-
             if (!startPoint) {
-                // Primeiro furo (entrada)
                 startPoint = point;
             } else {
-                // Segundo furo (saída)
                 createThread(startPoint, point);
-                
-                // Lógica de Deformação Refinada para Sutura Próxima
                 if(startPoint.x < 0 && point.x > 0) {
                      pullSkinVertices(startPoint, 'left');
                      pullSkinVertices(point, 'right');
@@ -209,7 +220,6 @@
                      pullSkinVertices(startPoint, 'right');
                      pullSkinVertices(point, 'left');
                 }
-               
                 startPoint = null;
                 stitchCount++;
                 document.getElementById('stitch-count').innerText = stitchCount;
@@ -219,9 +229,8 @@
         function pullSkinVertices(stitchPoint, side) {
             const positions = skinMesh.geometry.attributes.position.array;
             const vertexCount = positions.length / 3;
-
-            // --- AJUSTE CRÍTICO DE REALISMO ---
-            // Raio de 1.0 ou 0.8 permite suturar bem perto da borda sem puxar pele de longe.
+            
+            // Parâmetros de sutura ajustados para corte fino
             const influenceRadius = 1.0; 
             const pullStrength = 0.65; 
 
@@ -237,27 +246,20 @@
                 let vX = positions[ix];
                 let vY = positions[iy];
 
-                // Distância 2D (ignora altura Z)
                 const dx = vX - localStitchPoint.x;
                 const dy = vY - localStitchPoint.y;
                 const distance = Math.sqrt(dx*dx + dy*dy);
 
                 if (distance < influenceRadius) {
-                    // Curva de decaimento cúbica para uma deformação mais natural (skin-like)
                     const factor = 1.0 - (distance / influenceRadius);
                     const moveAmount = (factor * factor * factor) * pullStrength;
 
-                    // Move em direção ao centro (X=0)
                     if (side === 'left' && vX < 0) {
-                         // Limite de segurança para não cruzar o corte
                          positions[ix] = Math.min(-0.02, vX + moveAmount);
                     } 
                     else if (side === 'right' && vX > 0) {
                          positions[ix] = Math.max(0.02, vX - moveAmount);
                     }
-                    
-                    // Efeito "Bordas Evertidas" (Levanta a borda da ferida, essencial para boa cicatrização)
-                    // Aumentei o fator Z para 0.2 para simular a eversão da pele
                     positions[iz] += moveAmount * 0.25; 
                 }
             }
@@ -266,7 +268,7 @@
         }
 
         function createPunctureDot(point) {
-            const dotGeo = new THREE.SphereGeometry(0.03, 8, 8); // Ponto de entrada minúsculo
+            const dotGeo = new THREE.SphereGeometry(0.03, 8, 8);
             const dotMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
             const dot = new THREE.Mesh(dotGeo, dotMat);
             dot.position.copy(point);
@@ -277,15 +279,10 @@
 
         function createThread(p1, p2) {
             const midPoint = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            
-            // Fio bem baixo e tenso (arco de 0.1)
             midPoint.y += 0.1; 
-            
             const curve = new THREE.QuadraticBezierCurve3(p1, midPoint, p2);
-            const points = curve.getPoints(12); // Menos segmentos para parecer nylon esticado
+            const points = curve.getPoints(12);
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            
-            // Fio Preto (Nylon 4-0 Monofilamentar)
             const material = new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 2 });
             const curveObject = new THREE.Line(geometry, material);
             scene.add(curveObject);
@@ -296,8 +293,6 @@
             const startY = 0.5; const endY = -0.1; 
             let down = true; let speed = 0.1; 
             needleMesh.position.x = targetPos.x; needleMesh.position.z = targetPos.z;
-            
-            // Animação rápida
             const needleAnimation = setInterval(() => {
                 if (down) {
                     needleMesh.position.y -= speed;
