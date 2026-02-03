@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Inspeção Isolada</title>
+    <title>Inspeção Estática</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
@@ -16,38 +16,31 @@
         #header {
             background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, transparent 100%);
             color: #fff; padding: 20px; text-align: center; pointer-events: auto;
-            transition: opacity 0.3s;
+            transition: opacity 0.5s;
         }
         
-        /* Card flutuante - Design Clean */
         #info-card {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             width: 90%; max-width: 400px;
-            background: rgba(10, 10, 10, 0.85); 
+            background: rgba(10, 10, 10, 0.9); 
             border-top: 3px solid #4CAF50;
             backdrop-filter: blur(10px);
             color: #fff; padding: 20px; border-radius: 8px;
             display: none; 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            box-shadow: 0 10px 50px rgba(0,0,0,1);
             pointer-events: auto;
             text-align: center;
         }
 
         #info-card h3 { margin: 0 0 10px 0; color: #4CAF50; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; }
         #info-card p { font-size: 15px; color: #ddd; line-height: 1.6; margin: 0; }
+        #info-card .hint { font-size: 11px; color: #666; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; }
 
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: #4CAF50; font-size: 18px; font-weight: bold;
             background: rgba(0,0,0,0.9); padding: 15px 30px; border-radius: 30px;
             z-index: 50;
-        }
-        
-        /* Instrução de clique */
-        #hint {
-            position: absolute; bottom: 20px; width: 100%; text-align: center;
-            color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;
-            opacity: 0.7;
         }
     </style>
 </head>
@@ -56,17 +49,16 @@
     <div id="loading">CARREGANDO...</div>
 
     <div id="ui-layer">
-        <div id="header" id="top-bar">
+        <div id="header">
             <h2>MESA DE INSTRUMENTAÇÃO</h2>
+            <p style="margin:0; font-size:12px; color:#888;">Toque em um instrumento</p>
         </div>
 
         <div id="info-card">
             <h3 id="card-title">Título</h3>
             <p id="card-desc">Descrição.</p>
-            <p style="font-size: 11px; color: #666; margin-top: 15px;">TOQUE PARA VOLTAR À MESA</p>
+            <p class="hint">TOQUE NA TELA PARA VOLTAR À MESA</p>
         </div>
-        
-        <div id="hint">Toque no objeto para inspecionar</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -74,29 +66,30 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
+        // CONFIGURAÇÃO DO ARQUIVO
         const testFile = {
             file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
             name: 'Bone Holding Forceps',
             desc: 'Pinça de redução óssea utilizada para segurar fragmentos durante cirurgias ortopédicas. Note a cremalheira para travamento firme.'
         };
 
-        // Posições de Câmera
-        const CAM_TABLE = new THREE.Vector3(0, 15, 10); // Visão geral da mesa
-        const CAM_INSPECT = new THREE.Vector3(0, 0, 5); // Visão lateral (objeto isolado)
+        const CAM_TABLE = new THREE.Vector3(0, 15, 10); 
+        const CAM_INSPECT = new THREE.Vector3(0, 5, 8); // Câmera de inspeção
 
         let scene, camera, renderer, controls, raycaster, mouse;
         let loadedObject = null;
-        let tableMesh = null; // Referência global para poder esconder a mesa
+        let tableMesh = null;
         
         let isInspecting = false; 
         let targetCamPos = CAM_TABLE.clone(); 
+        let targetCamLookAt = new THREE.Vector3(0, 0, 0);
 
         init();
         animate();
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x1a1a1a); // Fundo Cinza Escuro
+            scene.background = new THREE.Color(0x1a1a1a);
             
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.copy(CAM_TABLE);
@@ -117,7 +110,6 @@
             const ambient = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambient);
             
-            // Luz Principal (Spotlight para sombras bonitas)
             const mainLight = new THREE.SpotLight(0xffffff, 1.2);
             mainLight.position.set(5, 20, 10);
             mainLight.castShadow = true;
@@ -125,12 +117,11 @@
             mainLight.shadow.mapSize.height = 2048;
             scene.add(mainLight);
 
-            // Luz de Recorte (Backlight - deixa o objeto bonito no escuro)
             const rimLight = new THREE.PointLight(0x4455ff, 0.5);
             rimLight.position.set(-5, 0, -5);
             scene.add(rimLight);
 
-            // --- CRIAÇÃO DA MESA ---
+            // Mesa
             const tableGeo = new THREE.PlaneGeometry(40, 40);
             const tableMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });
             tableMesh = new THREE.Mesh(tableGeo, tableMat);
@@ -153,7 +144,7 @@
             loader.load(path, function (gltf) {
                 const model = gltf.scene;
                 
-                // Configuração Inicial (Mesa)
+                // Configuração Inicial
                 model.rotation.x = -Math.PI / 2;
                 
                 // Escala
@@ -201,7 +192,7 @@
         function onClick(event) {
             if(!loadedObject) return;
 
-            // Se já estiver inspecionando, qualquer clique sai
+            // Se já estiver inspecionando, qualquer clique volta para a mesa
             if(isInspecting) {
                 setInspectionMode(false);
                 return;
@@ -225,45 +216,44 @@
             const header = document.getElementById('header');
 
             if (active) {
-                // --- MODO INSPEÇÃO (ISOLADO) ---
-                
-                // 1. Esconde a Mesa
+                // --- MODO INSPEÇÃO ---
                 tableMesh.visible = false;
-                scene.background = new THREE.Color(0x050505); // Fundo quase preto
+                scene.background = new THREE.Color(0x050505);
 
-                // 2. Centraliza o Objeto no Mundo (Para rotação perfeita)
+                // Centraliza e Levanta
                 loadedObject.position.set(0, 0, 0);
                 
-                // 3. Coloca em pé e gira um pouco
+                // Gira para ficar em pé (Apresentação)
                 loadedObject.rotation.x = 0; 
-                loadedObject.rotation.z = Math.PI / 4; 
-                // Pequena rotação automática contínua será tratada no animate()
+                loadedObject.rotation.z = Math.PI / 6;
+                // NOTA: A rotação Y agora é fixa, não muda no animate()
 
-                // 4. Zoom da Câmera
+                // Câmera Zoom
                 targetCamPos.copy(CAM_INSPECT);
+                targetCamLookAt.set(0, 0, 0);
 
                 // UI
                 card.style.display = 'block';
-                header.style.opacity = '0'; // Esconde título da mesa
+                header.style.opacity = '0';
                 document.getElementById('card-title').innerText = testFile.name;
                 document.getElementById('card-desc').innerText = testFile.desc;
 
             } else {
-                // --- MODO MESA (NORMAL) ---
-                
-                // 1. Mostra a Mesa
+                // --- MODO MESA ---
                 tableMesh.visible = true;
-                scene.background = new THREE.Color(0x1a1a1a); // Fundo cinza original
+                scene.background = new THREE.Color(0x1a1a1a);
 
-                // 2. Devolve para posição original
+                // Volta posição
                 loadedObject.position.set(0, loadedObject.userData.baseY, 0);
                 
-                // 3. Deita o objeto
+                // Volta rotação (Deitado)
                 loadedObject.rotation.x = loadedObject.userData.baseRotX;
                 loadedObject.rotation.z = 0;
+                loadedObject.rotation.y = 0; // Garante que zera o giro lateral
 
-                // 4. Afasta Câmera
+                // Câmera Afasta
                 targetCamPos.copy(CAM_TABLE);
+                targetCamLookAt.set(0, 0, 0);
 
                 // UI
                 card.style.display = 'none';
@@ -280,13 +270,11 @@
         function animate() {
             requestAnimationFrame(animate);
             
-            // Interpolação de Câmera (Zoom Suave)
+            // Interpolação de Câmera
             camera.position.lerp(targetCamPos, 0.08);
+            controls.target.lerp(targetCamLookAt, 0.08);
 
-            // Rotação leve se estiver inspecionando
-            if(isInspecting && loadedObject) {
-                loadedObject.rotation.y += 0.005; // Gira devagarzinho estilo vitrine
-            }
+            // REMOVIDO: loadedObject.rotation.y += ... (Isso parou a órbita)
 
             controls.update();
             renderer.render(scene, camera);
