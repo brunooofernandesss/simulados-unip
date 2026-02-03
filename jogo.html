@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Inspeção Estática</title>
+    <title>Inspeção com Zoom Livre</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         
@@ -42,6 +42,13 @@
             background: rgba(0,0,0,0.9); padding: 15px 30px; border-radius: 30px;
             z-index: 50;
         }
+        
+        /* Botão para voltar caso o usuário se perca no zoom */
+        #back-btn {
+            position: absolute; top: 20px; left: 20px; pointer-events: auto;
+            background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);
+            padding: 10px 15px; border-radius: 5px; cursor: pointer; display: none;
+        }
     </style>
 </head>
 <body>
@@ -51,13 +58,15 @@
     <div id="ui-layer">
         <div id="header">
             <h2>MESA DE INSTRUMENTAÇÃO</h2>
-            <p style="margin:0; font-size:12px; color:#888;">Toque em um instrumento</p>
+            <p style="margin:0; font-size:12px; color:#888;">Toque para inspecionar</p>
         </div>
+        
+        <button id="back-btn" onclick="exitInspection()">⬅ VOLTAR</button>
 
         <div id="info-card">
             <h3 id="card-title">Título</h3>
             <p id="card-desc">Descrição.</p>
-            <p class="hint">TOQUE NA TELA PARA VOLTAR À MESA</p>
+            <p class="hint">Use dois dedos para zoom</p>
         </div>
     </div>
 
@@ -66,7 +75,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
-        // CONFIGURAÇÃO DO ARQUIVO
+        // --- ARQUIVO DE TESTE ---
         const testFile = {
             file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
             name: 'Bone Holding Forceps',
@@ -74,15 +83,18 @@
         };
 
         const CAM_TABLE = new THREE.Vector3(0, 15, 10); 
-        const CAM_INSPECT = new THREE.Vector3(0, 5, 8); // Câmera de inspeção
+        const CAM_INSPECT = new THREE.Vector3(0, 5, 8); 
 
         let scene, camera, renderer, controls, raycaster, mouse;
         let loadedObject = null;
         let tableMesh = null;
         
         let isInspecting = false; 
-        let targetCamPos = CAM_TABLE.clone(); 
-        let targetCamLookAt = new THREE.Vector3(0, 0, 0);
+        
+        // Variáveis de Transição Suave
+        let isTransitioning = false;
+        let targetPos = new THREE.Vector3();
+        let targetLookAt = new THREE.Vector3();
 
         init();
         animate();
@@ -101,22 +113,23 @@
             renderer.outputEncoding = THREE.sRGBEncoding; 
             document.body.appendChild(renderer.domElement);
 
+            // Controles Orbitais (O segredo do zoom com os dedos)
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
+            controls.enableDamping = true; // Movimento suave
             controls.dampingFactor = 0.05;
+            controls.enablePan = false; // Desativa arrastar para os lados (mantém centralizado)
+            controls.enableZoom = true; // Ativa Zoom (Rodinha ou Pinça)
+            controls.minDistance = 2; // Zoom máximo permitido
+            controls.maxDistance = 20; // Zoom mínimo
             controls.maxPolarAngle = Math.PI / 2.1; 
 
             // Luzes
             const ambient = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambient);
-            
             const mainLight = new THREE.SpotLight(0xffffff, 1.2);
             mainLight.position.set(5, 20, 10);
             mainLight.castShadow = true;
-            mainLight.shadow.mapSize.width = 2048;
-            mainLight.shadow.mapSize.height = 2048;
             scene.add(mainLight);
-
             const rimLight = new THREE.PointLight(0x4455ff, 0.5);
             rimLight.position.set(-5, 0, -5);
             scene.add(rimLight);
@@ -190,75 +203,71 @@
         }
 
         function onClick(event) {
-            if(!loadedObject) return;
+            if(!loadedObject || isTransitioning) return;
 
-            // Se já estiver inspecionando, qualquer clique volta para a mesa
-            if(isInspecting) {
-                setInspectionMode(false);
-                return;
-            }
-
-            // Se não estiver, verifica se clicou no objeto
+            // Se já estiver inspecionando e clicar no fundo vazio (não no objeto), sai
+            // Mas se estiver inspecionando e clicar no objeto, não faz nada (deixa dar zoom)
+            
+            // Lógica de Raycaster
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects([loadedObject], true);
 
             if (intersects.length > 0) {
-                setInspectionMode(true);
+                if (!isInspecting) enterInspection();
+            } else {
+                // Clicou no vazio
+                if (isInspecting) exitInspection();
             }
         }
 
-        function setInspectionMode(active) {
-            isInspecting = active;
-            const card = document.getElementById('info-card');
-            const header = document.getElementById('header');
+        function enterInspection() {
+            isInspecting = true;
+            isTransitioning = true; // Inicia transição automática
 
-            if (active) {
-                // --- MODO INSPEÇÃO ---
-                tableMesh.visible = false;
-                scene.background = new THREE.Color(0x050505);
+            // 1. Prepara a Cena
+            tableMesh.visible = false;
+            scene.background = new THREE.Color(0x050505);
 
-                // Centraliza e Levanta
-                loadedObject.position.set(0, 0, 0);
-                
-                // Gira para ficar em pé (Apresentação)
-                loadedObject.rotation.x = 0; 
-                loadedObject.rotation.z = Math.PI / 6;
-                // NOTA: A rotação Y agora é fixa, não muda no animate()
+            // 2. Centraliza o Objeto (Importante para o OrbitControls girar em torno dele)
+            loadedObject.position.set(0, 0, 0);
+            loadedObject.rotation.x = 0; 
+            loadedObject.rotation.z = Math.PI / 6;
 
-                // Câmera Zoom
-                targetCamPos.copy(CAM_INSPECT);
-                targetCamLookAt.set(0, 0, 0);
+            // 3. Define onde a câmera VAI parar
+            targetPos.copy(CAM_INSPECT);
+            targetLookAt.set(0, 0, 0);
 
-                // UI
-                card.style.display = 'block';
-                header.style.opacity = '0';
-                document.getElementById('card-title').innerText = testFile.name;
-                document.getElementById('card-desc').innerText = testFile.desc;
+            // UI
+            document.getElementById('info-card').style.display = 'block';
+            document.getElementById('header').style.opacity = '0';
+            document.getElementById('back-btn').style.display = 'block';
+            document.getElementById('card-title').innerText = testFile.name;
+            document.getElementById('card-desc').innerText = testFile.desc;
+        }
 
-            } else {
-                // --- MODO MESA ---
-                tableMesh.visible = true;
-                scene.background = new THREE.Color(0x1a1a1a);
+        function exitInspection() {
+            isInspecting = false;
+            isTransitioning = true; // Inicia transição de volta
 
-                // Volta posição
-                loadedObject.position.set(0, loadedObject.userData.baseY, 0);
-                
-                // Volta rotação (Deitado)
-                loadedObject.rotation.x = loadedObject.userData.baseRotX;
-                loadedObject.rotation.z = 0;
-                loadedObject.rotation.y = 0; // Garante que zera o giro lateral
+            // 1. Prepara a Cena
+            tableMesh.visible = true;
+            scene.background = new THREE.Color(0x1a1a1a);
 
-                // Câmera Afasta
-                targetCamPos.copy(CAM_TABLE);
-                targetCamLookAt.set(0, 0, 0);
+            // 2. Devolve o objeto
+            loadedObject.position.set(0, loadedObject.userData.baseY, 0);
+            loadedObject.rotation.x = loadedObject.userData.baseRotX;
+            loadedObject.rotation.z = 0;
 
-                // UI
-                card.style.display = 'none';
-                header.style.opacity = '1';
-            }
+            // 3. Define onde a câmera VAI parar
+            targetPos.copy(CAM_TABLE);
+            targetLookAt.set(0, 0, 0);
+
+            // UI
+            document.getElementById('info-card').style.display = 'none';
+            document.getElementById('header').style.opacity = '1';
+            document.getElementById('back-btn').style.display = 'none';
         }
 
         function onResize() {
@@ -270,13 +279,24 @@
         function animate() {
             requestAnimationFrame(animate);
             
-            // Interpolação de Câmera
-            camera.position.lerp(targetCamPos, 0.08);
-            controls.target.lerp(targetCamLookAt, 0.08);
+            if (isTransitioning) {
+                // --- FASE DE TRANSIÇÃO AUTOMÁTICA ---
+                // Move a câmera sozinha até o ponto ideal
+                
+                // Lerp (interpolação) suave
+                camera.position.lerp(targetPos, 0.1);
+                controls.target.lerp(targetLookAt, 0.1);
+                
+                // Verifica se chegou perto o suficiente para soltar o controle
+                if (camera.position.distanceTo(targetPos) < 0.1) {
+                    isTransitioning = false; // LIBERA O CONTROLE PARA O USUÁRIO
+                }
+            } else {
+                // --- FASE DE CONTROLE LIVRE ---
+                // Aqui o OrbitControls reina absoluto (Zoom e Rotação funcionam)
+                controls.update();
+            }
 
-            // REMOVIDO: loadedObject.rotation.y += ... (Isso parou a órbita)
-
-            controls.update();
             renderer.render(scene, camera);
         }
     </script>
