@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Teste Unitário - Bone Holding Forceps</title>
+    <title>Teste Unitário - Auto Ajuste</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         
@@ -36,17 +36,25 @@
             color: #4CAF50; font-size: 18px; font-weight: bold;
             background: rgba(0,0,0,0.8); padding: 15px 30px; border-radius: 30px;
         }
+        
+        /* Botão extra para resetar se precisar */
+        #reset-btn {
+            position: absolute; top: 20px; right: 20px; pointer-events: auto;
+            background: #333; color: white; border: 1px solid #555; padding: 10px; cursor: pointer;
+        }
     </style>
 </head>
 <body>
 
-    <div id="loading">CARREGANDO ARQUIVO GLB...</div>
+    <div id="loading">CARREGANDO E CALCULANDO ALTURA...</div>
 
     <div id="ui-layer">
         <div id="header">
-            <h2>TESTE DE RENDERIZAÇÃO</h2>
-            <p style="color: #888; margin: 0;">Leo Bone Holding Forceps 1</p>
+            <h2>TESTE: ALINHAMENTO AUTOMÁTICO</h2>
+            <p style="color: #888; margin: 0;">O objeto deve aparecer SOBRE a mesa</p>
         </div>
+        
+        <button id="reset-btn" onclick="resetCamera()">Recentralizar Câmera</button>
 
         <div id="info-card">
             <h3 id="card-title">Nome</h3>
@@ -59,11 +67,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
-        // CONFIGURAÇÃO DO SEU ARQUIVO DE TESTE
+        // CONFIGURAÇÃO
         const testFile = {
-            file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', // Nome exato do arquivo
-            name: 'Bone Holding Forceps (Pinça de Osso)',
-            desc: 'Instrumento robusto utilizado em ortopedia para segurar e estabilizar fragmentos ósseos durante a redução de fraturas ou fixação de placas.'
+            file: 'Leo Bone Holding Forceps 1 SharpFusion.glb', 
+            name: 'Bone Holding Forceps',
+            desc: 'Pinça de redução óssea. Note como ela agora "pousa" corretamente sobre a superfície.'
         };
 
         let scene, camera, renderer, controls, raycaster, mouse;
@@ -76,39 +84,40 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x222222);
             
+            // Câmera posicionada mais alto para garantir que você veja a mesa de cima
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 10, 10); // Posição da câmera
+            camera.position.set(0, 15, 10);
+            camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.shadowMap.enabled = true;
-            renderer.outputEncoding = THREE.sRGBEncoding; // Importante para GLB ficar com cor certa
+            renderer.outputEncoding = THREE.sRGBEncoding; 
             document.body.appendChild(renderer.domElement);
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
+            controls.maxPolarAngle = Math.PI / 2.1; // Impede que a câmera vá para baixo da mesa
 
             // Luzes
-            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambient);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-            dirLight.position.set(5, 10, 7);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(5, 20, 10);
             dirLight.castShadow = true;
             scene.add(dirLight);
 
             // Mesa Verde
-            const tableGeo = new THREE.PlaneGeometry(20, 20);
+            const tableGeo = new THREE.PlaneGeometry(30, 30);
             const tableMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.8 });
             const table = new THREE.Mesh(tableGeo, tableMat);
             table.rotation.x = -Math.PI / 2;
             table.receiveShadow = true;
             scene.add(table);
 
-            // Carregar o Modelo
             loadModel();
 
-            // Interação
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
             window.addEventListener('resize', onResize);
@@ -122,31 +131,36 @@
             loader.load(path, function (gltf) {
                 const model = gltf.scene;
                 
-                // Centraliza e ajusta escala
-                // GLBs médicos as vezes vêm fora de escala (metros vs mm)
-                const box = new THREE.Box3().setFromObject(model);
-                const size = new THREE.Vector3();
-                box.getSize(size);
+                // 1. Aplica a rotação inicial (Deitado)
+                model.rotation.x = -Math.PI / 2;
                 
-                // Se o objeto for muito grande (> 10 unidades) ou muito pequeno (< 0.5), normaliza para tamanho 4
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const scaleFactor = 4.0 / maxDim;
-                
+                // 2. Ajusta Escala (Normalização)
+                const boxTemp = new THREE.Box3().setFromObject(model);
+                const sizeTemp = new THREE.Vector3();
+                boxTemp.getSize(sizeTemp);
+                const maxDim = Math.max(sizeTemp.x, sizeTemp.y, sizeTemp.z);
+                const scaleFactor = 5.0 / maxDim; // Aumentei um pouco para 5.0 ficar bem visível
                 model.scale.set(scaleFactor, scaleFactor, scaleFactor);
-                
-                // Posiciona na mesa
-                model.position.set(0, 0.5, 0); 
-                
-                // Tenta corrigir rotação (muitos vêm em pé)
-                model.rotation.x = -Math.PI / 2; // Deita na mesa
-                // Se ficar torto, tente remover a linha acima ou mudar para Math.PI/2
 
+                // 3. O SEGREDO: Correção Automática de Altura (Bounding Box)
+                // Atualiza o mundo para que a rotação e escala acima tenham efeito no cálculo
+                model.updateMatrixWorld(true); 
+                
+                const boxFinal = new THREE.Box3().setFromObject(model);
+                const bottomY = boxFinal.min.y; // Pega o ponto mais baixo do objeto no mundo 3D
+                
+                // Se o ponto mais baixo for -2, precisamos subir +2.
+                // Adicionamos +0.1 para ele flutuar levemente e não "brigar" com a textura da mesa (Z-fighting)
+                const liftHeight = -bottomY + 0.1;
+                
+                model.position.y = liftHeight;
+
+                // Materiais
                 model.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
-                        // Força um material metálico se o GLB não tiver textura boa
-                        child.material.metalness = 0.8;
+                        child.material.metalness = 0.7;
                         child.material.roughness = 0.3;
                     }
                 });
@@ -158,38 +172,52 @@
 
             }, undefined, function (error) {
                 console.error(error);
-                document.getElementById('loading').innerText = "ERRO: Arquivo não encontrado na pasta /models";
-                document.getElementById('loading').style.color = "red";
+                document.getElementById('loading').innerText = "ERRO: Arquivo não encontrado!";
             });
         }
 
         function onClick(event) {
             if(!loadedObject) return;
-
+            // Detecta clique (lógica simplificada)
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
             raycaster.setFromCamera(mouse, camera);
-            // Verifica interseção recursiva (true) pois GLB é um grupo de malhas
             const intersects = raycaster.intersectObjects([loadedObject], true);
 
             if (intersects.length > 0) {
-                // Animação de "Pulo"
-                loadedObject.position.y = 3.0;
-                loadedObject.rotation.z += 1.0; 
-                loadedObject.rotation.x = 0; // Fica em pé para ver melhor
-
-                // Mostra Info
-                const card = document.getElementById('info-card');
-                card.style.display = 'block';
-                document.getElementById('card-title').innerText = testFile.name;
-                document.getElementById('card-desc').innerText = testFile.desc;
+                // Pulo
+                // Para pular, pegamos a altura base (calculada antes) e somamos
+                const currentY = loadedObject.position.y;
+                if(currentY < 2) { // Se estiver na mesa
+                     loadedObject.userData.baseY = currentY; // Salva onde ele estava
+                     loadedObject.position.y = 4.0;
+                     loadedObject.rotation.z += 0.5;
+                     loadedObject.rotation.x = 0; // Fica em pé
+                     
+                     document.getElementById('info-card').style.display = 'block';
+                     document.getElementById('card-title').innerText = testFile.name;
+                     document.getElementById('card-desc').innerText = testFile.desc;
+                }
             } else {
-                // Reseta
-                loadedObject.position.y = 0.5;
-                loadedObject.rotation.x = -Math.PI / 2; // Volta a deitar
+                // Volta pra mesa
+                if(loadedObject.userData.baseY !== undefined) {
+                    loadedObject.position.y = loadedObject.userData.baseY;
+                } else {
+                     // Recalcula se perder a ref (fallback seguro)
+                     const box = new THREE.Box3().setFromObject(loadedObject);
+                     // Aproximação segura
+                     loadedObject.position.y = (box.max.y - box.min.y) / 2; 
+                }
+                
+                loadedObject.rotation.x = -Math.PI / 2; // Deita de novo
                 document.getElementById('info-card').style.display = 'none';
             }
+        }
+
+        function resetCamera() {
+            camera.position.set(0, 15, 10);
+            camera.lookAt(0,0,0);
+            controls.reset();
         }
 
         function onResize() {
@@ -200,10 +228,6 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            if(loadedObject && loadedObject.position.y > 1) {
-                // Gira suavemente enquanto está selecionado
-                loadedObject.rotation.y += 0.01;
-            }
             controls.update();
             renderer.render(scene, camera);
         }
