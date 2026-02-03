@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de Sutura Realista (PBR)</title>
+    <title>Simulador de Sutura Realista (Corrigido)</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #222; }
         #info {
@@ -20,15 +20,20 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; font-size: 24px;
         }
+        #gui { position: absolute; top: 60px; right: 10px; }
+        button { padding: 8px 15px; cursor: pointer; background: #444; color: #fff; border: 1px solid #666; }
     </style>
 </head>
 <body>
     <div id="info">
-        <h2>Simulador de Sutura (Textura Silicone)</h2>
-        <p>Clique em um lado da incisão e depois no outro.</p>
+        <h2>Simulador de Sutura (Focado no Centro)</h2>
+        <p>Clique de um lado e depois do outro da incisão central.</p>
         <p>Pontos: <span id="stitch-count">0</span></p>
     </div>
     <div id="loading">Carregando texturas...</div>
+    <div id="gui">
+        <button onclick="resetSutures()">Resetar</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
@@ -39,7 +44,6 @@
         let startPoint = null;
         let stitchCount = 0;
         
-        // Gerenciador de carregamento para garantir que as imagens existam antes de iniciar
         const manager = new THREE.LoadingManager();
         manager.onLoad = function ( ) {
             document.getElementById('loading').style.display = 'none';
@@ -47,64 +51,58 @@
             animate();
         };
 
-        // Carregador de texturas
         const textureLoader = new THREE.TextureLoader(manager);
-        // ATENÇÃO: Você precisa ter essas duas imagens na mesma pasta do HTML
+        // Certifique-se de que as imagens estão na mesma pasta
         const colorTexture = textureLoader.load('pele_cor.jpg'); 
         const normalTexture = textureLoader.load('pele_normal.jpg');
 
-        // Ajustes de textura para realismo
-        colorTexture.wrapS = colorTexture.wrapT = THREE.RepeatWrapping;
-        normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
-        // Repete a textura para ela não ficar "esticada" se a imagem for pequena
-        colorTexture.repeat.set(2, 2); 
-        normalTexture.repeat.set(2, 2);
+        // --- CORREÇÃO 1: Remover repetição da textura ---
+        // A textura agora vai esticar uma única vez sobre o plano,
+        // garantindo que o corte no centro da imagem fique no centro do 3D.
+        colorTexture.minFilter = THREE.LinearFilter;
+        normalTexture.minFilter = THREE.LinearFilter;
 
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x333333); // Fundo mais escuro para destacar
+            scene.background = new THREE.Color(0x2a2a2a);
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // Câmera mais próxima e inclinada para ver melhor a textura
-            camera.position.set(0, 8, 6); 
+            // Câmera posicionada para olhar bem para o centro
+            camera.position.set(0, 10, 4); 
             camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Sombras mais suaves
-            renderer.outputEncoding = THREE.sRGBEncoding; // Cores mais corretas
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding;
             document.body.appendChild(renderer.domElement);
 
-            // --- LUZES (Cruciais para ver o efeito do Normal Map) ---
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            // Luzes
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
 
-            // Luz principal direcional que gera sombras
-            const mainLight = new THREE.DirectionalLight(0xffffff, 1);
-            mainLight.position.set(5, 10, 5);
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            mainLight.position.set(2, 8, 5);
             mainLight.castShadow = true;
-            mainLight.shadow.mapSize.width = 2048; // Sombra de alta qualidade
-            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.mapSize.set(2048, 2048);
             scene.add(mainLight);
+            
+            const fillLight = new THREE.PointLight(0xffeedd, 0.5);
+            fillLight.position.set(-5, 3, -5);
+            scene.add(fillLight);
 
-             // Luz de preenchimento para não ficar muito escuro do outro lado
-             const fillLight = new THREE.DirectionalLight(0xffeedd, 0.5);
-             fillLight.position.set(-5, 5, -5);
-             scene.add(fillLight);
 
-
-            // --- CRIAÇÃO DOS OBJETOS ---
-
-            // Pele Realista (Usando MeshStandardMaterial para PBR)
-            const skinGeometry = new THREE.PlaneGeometry(15, 15);
+            // Objeto da Pele
+            // Um plano quadrado para combinar com a imagem quadrada
+            const skinGeometry = new THREE.PlaneGeometry(12, 12); 
             const skinMaterial = new THREE.MeshStandardMaterial({ 
-                map: colorTexture,         // A cor da pele
-                normalMap: normalTexture,  // O relevo (poros, corte)
-                normalScale: new THREE.Vector2(1, 1), // Intensidade do relevo
-                roughness: 0.7, // Quão fosca é a pele (0 = espelho, 1 = borracha fosca)
-                metalness: 0.0, // Pele não é metal
+                map: colorTexture,
+                normalMap: normalTexture,
+                normalScale: new THREE.Vector2(1.5, 1.5), // Relevo um pouco mais forte
+                roughness: 0.8,
+                metalness: 0.0,
                 side: THREE.DoubleSide
             });
 
@@ -113,19 +111,15 @@
             skinMesh.receiveShadow = true;
             scene.add(skinMesh);
 
-            // NOTA: Removi o objeto "ferida" vermelho antigo, pois a incisão
-            // agora deve estar desenhada na própria imagem da textura.
-
             // Agulha
-            const needleGeo = new THREE.ConeGeometry(0.08, 1.2, 12);
-            const needleMat = new THREE.MeshStandardMaterial({ color: 0xddeeff, metalness: 0.9, roughness: 0.2 });
+            const needleGeo = new THREE.ConeGeometry(0.06, 1, 12);
+            const needleMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 1.0, roughness: 0.1 });
             needleMesh = new THREE.Mesh(needleGeo, needleMat);
             needleMesh.rotation.x = Math.PI;
             needleMesh.position.set(0, 2, 0);
             needleMesh.castShadow = true;
             scene.add(needleMesh);
 
-            // --- INTERAÇÃO ---
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
 
@@ -141,12 +135,12 @@
             const intersects = raycaster.intersectObject(skinMesh);
             if (intersects.length > 0) {
                 const point = intersects[0].point;
-                // Agulha segue o mouse, um pouco acima
-                needleMesh.position.set(point.x, point.y + 0.8, point.z);
+                needleMesh.position.set(point.x, point.y + 0.6, point.z);
             }
         }
 
         function onMouseClick(event) {
+            if (event.target.tagName === 'BUTTON') return;
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObject(skinMesh);
             if (intersects.length > 0) {
@@ -158,11 +152,13 @@
         }
 
         function handleSutureLogic(point) {
-            // Ponto de entrada (pequena esfera)
-            const dotGeo = new THREE.SphereGeometry(0.08, 8, 8);
-            const dotMat = new THREE.MeshBasicMaterial({ color: 0x3366ff });
+            // Ponto de entrada/saída (pequena esfera para marcar)
+            const dotGeo = new THREE.SphereGeometry(0.05, 8, 8);
+            const dotMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a }); // Cor escura para o furo
             const dot = new THREE.Mesh(dotGeo, dotMat);
             dot.position.copy(point);
+            // Levemente afundado na pele para realismo
+            dot.position.y -= 0.02; 
             scene.add(dot);
             stitches.push(dot);
 
@@ -178,23 +174,28 @@
 
         function createThread(p1, p2) {
             const midPoint = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            midPoint.y += 1.2; // Altura do arco
+            
+            // --- CORREÇÃO 2: Fio mais tenso ("fechado") ---
+            // Em vez de um arco alto (+1.2), usamos um arco bem baixo (+0.25).
+            // Isso faz o fio parecer esticado sobre a ferida.
+            midPoint.y += 0.25; 
+
             const curve = new THREE.QuadraticBezierCurve3(p1, midPoint, p2);
-            const points = curve.getPoints(25);
+            const points = curve.getPoints(20);
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            // Fio mais realista e grosso
-            const material = new THREE.LineBasicMaterial({ color: 0x3366ff, linewidth: 4 });
+            
+            // Fio azul escuro e mais fino para parecer nylon cirúrgico
+            const material = new THREE.LineBasicMaterial({ color: 0x0033cc, linewidth: 2 });
             const curveObject = new THREE.Line(geometry, material);
             scene.add(curveObject);
             stitches.push(curveObject);
         }
 
         function animateNeedleSpecific(targetPos, callback) {
-            const startY = 0.8;
-            const endY = -0.1; 
+            const startY = 0.6;
+            const endY = -0.2; 
             let down = true;
-            // Velocidade da animação aumentada um pouco
-            let speed = 0.15; 
+            let speed = 0.1; 
             
             needleMesh.position.x = targetPos.x;
             needleMesh.position.z = targetPos.z;
@@ -212,6 +213,14 @@
                     }
                 }
             }, 16);
+        }
+
+        function resetSutures() {
+            for (let obj of stitches) { scene.remove(obj); }
+            stitches = [];
+            startPoint = null;
+            stitchCount = 0;
+            document.getElementById('stitch-count').innerText = 0;
         }
 
         function onWindowResize() {
