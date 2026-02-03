@@ -3,416 +3,421 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Simulador Cirúrgico V2 - Imersivo</title>
+    <title>Simulador Sutura - Versão Estável</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background-color: #050505; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #111; }
+        
         #info {
-            position: absolute; top: 20px; width: 100%; text-align: center;
+            position: absolute; top: 10px; width: 100%; text-align: center;
             color: #fff; pointer-events: none; z-index: 10;
-            text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
+            text-shadow: 1px 1px 2px #000;
         }
-        #info h3 { margin: 0; font-weight: 300; letter-spacing: 3px; text-transform: uppercase; font-size: 18px; }
-        #status-bar {
-            margin-top: 10px; font-size: 14px; font-weight: bold;
-            color: #00d4ff; text-transform: uppercase; letter-spacing: 1px;
+        
+        #status {
+            color: #00d4ff; font-weight: bold; margin-top: 5px; font-size: 16px;
         }
-        #gui-container { position: absolute; top: 10px; right: 10px; z-index: 30; }
-        #reset-btn-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 30; }
+
+        #gui-container { position: absolute; top: 10px; right: 10px; z-index: 20; }
+        
+        #btn-container { 
+            position: absolute; bottom: 20px; left: 50%; 
+            transform: translateX(-50%); z-index: 20; 
+        }
+        
         button { 
-            padding: 15px 40px; font-size: 14px; cursor: pointer; font-weight: bold; letter-spacing: 1px;
-            background: rgba(0, 100, 255, 0.3); color: #fff; border: 1px solid rgba(0,100,255,0.5); 
-            border-radius: 4px; backdrop-filter: blur(5px); transition: all 0.3s ease;
-        }
-        button:hover { background: rgba(0, 100, 255, 0.5); border-color: #fff; }
-        /* Loading overlay para feedback visual */
-        #loading {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; display: flex; align-items: center; justify-content: center;
-            color: #00d4ff; z-index: 50; font-size: 20px; letter-spacing: 2px;
+            padding: 12px 30px; font-size: 16px; cursor: pointer; font-weight: bold;
+            background: #0066cc; color: #fff; border: none; border-radius: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="loading">CARREGANDO CENTRO CIRÚRGICO...</div>
-    
+
     <div id="info">
-        <h3>Simulador de Procedimentos - Treino de Sutura</h3>
-        <div id="status-bar">Preparando campo estéril...</div>
+        <h3>Treino de Sutura (Versão Leve)</h3>
+        <div id="status">Toque para suturar</div>
     </div>
     
     <div id="gui-container"></div>
     
-    <div id="reset-btn-container">
-        <button onclick="resetSimulation()">NOVO PACIENTE</button>
+    <div id="btn-container">
+        <button onclick="resetApp()">LIMPAR TUDO</button>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r146/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.17.0/dist/lil-gui.umd.min.js"></script>
 
     <script>
         let scene, camera, renderer, raycaster, mouse;
         let skinMesh, toolGroup, scissorsGroup;
-        let stitchesObjects = [];
+        let stitches = [];
         let startPoint = null;
-        let stitchCount = 0;
-        let isBusy = false;
+        let isBusy = false; // Bloqueia cliques durante animação
 
-        // Configurações Iniciais
+        // Configurações
         const settings = {
-            offsetX: 0.0, offsetY: 0.0, zoomLevel: 14, normalScale: 0.5, speed: 0.8
-        };
-        
-        const statusEl = document.getElementById('status-bar');
-        const loadingEl = document.getElementById('loading');
-        
-        // Cores
-        const SUTURE_COLOR = 0x0066ff; 
-        const GLOVE_COLOR = 0x3377bb;
-
-        const manager = new THREE.LoadingManager();
-        manager.onLoad = function ( ) { 
-            loadingEl.style.display = 'none'; // Esconde tela de carregamento quando pronto
-            init(); 
-            createScissors(); 
-            initGUI(); 
-            animate(); 
-            updateStatus("Campo Estéril. Inicie o procedimento.");
+            offsetX: 0.0,
+            offsetY: 0.0,
+            zoom: 12,
+            speed: 1.0
         };
 
-        const textureLoader = new THREE.TextureLoader(manager);
-        // Tenta carregar. Se falhar, usa uma cor sólida para não travar.
-        const colorTexture = textureLoader.load('pele_cor.jpg', (t) => {
-            t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.encoding = THREE.sRGBEncoding; 
-        }, undefined, (err) => console.log("Erro textura cor", err)); 
-        
-        const normalTexture = textureLoader.load('pele_normal.jpg', (t) => { 
-            t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; 
-        }, undefined, (err) => console.log("Erro textura normal", err));
+        const statusEl = document.getElementById('status');
+        const SUTURE_COLOR = 0x0055ff; // Azul
+
+        // Inicia tudo
+        init();
+        animate();
 
         function init() {
+            // 1. Cena
             scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x05101a, 0.025); // Fundo escuro azulado
+            scene.background = new THREE.Color(0x111111);
+            scene.fog = new THREE.FogExp2(0x111111, 0.02);
 
+            // 2. Câmera
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            updateCameraPosition(); 
+            camera.position.set(0, settings.zoom, settings.zoom * 0.4);
+            camera.lookAt(0, 0, 0);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-            renderer.setPixelRatio(window.devicePixelRatio); 
+            // 3. Renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Importante para tablet
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.outputEncoding = THREE.sRGBEncoding;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping; 
-            renderer.toneMappingExposure = 1.0;
             document.body.appendChild(renderer.domElement);
 
-            // ILUMINAÇÃO REFORÇADA (Para garantir que nada fique preto)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
-            scene.add(ambientLight);
-            
-            const mainLight = new THREE.SpotLight(0xfff0e0, 1.2);
-            mainLight.position.set(5, 15, 5);
-            mainLight.angle = 0.4;
-            mainLight.penumbra = 0.3;
-            mainLight.castShadow = true;
-            mainLight.shadow.mapSize.set(2048, 2048);
-            scene.add(mainLight);
+            // 4. Luzes
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
 
-            const fillLight = new THREE.PointLight(0xddeeff, 0.4);
-            fillLight.position.set(-5, 8, -5);
-            scene.add(fillLight);
+            const spot = new THREE.SpotLight(0xffffff, 1);
+            spot.position.set(5, 15, 5);
+            spot.castShadow = true;
+            scene.add(spot);
 
-            // PELE
-            const skinGeometry = new THREE.PlaneGeometry(10, 10, 150, 150); 
-            const skinMaterial = new THREE.MeshStandardMaterial({ 
-                map: colorTexture, 
-                normalMap: normalTexture, 
-                normalScale: new THREE.Vector2(0.5, 0.5),
-                color: 0xffccaa, // Cor de fundo caso a imagem falhe
-                roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide
+            // 5. Texturas (Carregamento direto, sem loading screen para não travar)
+            const loader = new THREE.TextureLoader();
+            const texMap = loader.load('pele_cor.jpg', function(t) {
+                t.minFilter = THREE.LinearFilter;
+                t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
             });
-            skinMesh = new THREE.Mesh(skinGeometry, skinMaterial);
+            const texNorm = loader.load('pele_normal.jpg');
+
+            // 6. Pele
+            const geo = new THREE.PlaneGeometry(10, 10, 100, 100);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xffccaa, // Cor base se a textura falhar
+                map: texMap,
+                normalMap: texNorm,
+                normalScale: new THREE.Vector2(0.5, 0.5),
+                roughness: 0.6
+            });
+            skinMesh = new THREE.Mesh(geo, mat);
             skinMesh.rotation.x = -Math.PI / 2;
             skinMesh.receiveShadow = true;
-            // Importante para deformação:
+            // Permite deformar a pele
             skinMesh.geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
             scene.add(skinMesh);
 
-            // Campo cirúrgico
-            const drapeGeo = new THREE.PlaneGeometry(30, 30);
-            const drapeMat = new THREE.MeshStandardMaterial({ color: 0x225533, roughness: 0.9 });
-            const drape = new THREE.Mesh(drapeGeo, drapeMat);
-            drape.rotation.x = -Math.PI / 2;
-            drape.position.y = -0.05;
-            drape.receiveShadow = true;
-            scene.add(drape);
+            // 7. Ferramentas (Simples Geometrias)
+            createTools();
 
-            createNeedleHolderWithHand();
-
+            // 8. Interação
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
 
-            window.addEventListener('resize', onWindowResize, false);
-            window.addEventListener('pointerup', onMouseClick, false); 
-            window.addEventListener('pointermove', onMouseMove, false);
+            window.addEventListener('resize', onResize);
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onClick);
+            
+            // GUI
+            setupGUI(texMap, texNorm);
         }
 
-        // --- CRIAÇÃO DE MÃOS E INSTRUMENTOS ---
-
-        function createStylizedFinger(radius, length) {
-             // CapsuleGeometry agora funciona porque atualizamos a lib para r146
-             const fingerGeo = new THREE.CapsuleGeometry(radius, length, 4, 16);
-             const gloveMat = new THREE.MeshStandardMaterial({ color: GLOVE_COLOR, roughness: 0.6, metalness: 0.1 });
-             return new THREE.Mesh(fingerGeo, gloveMat);
-        }
-        
-        function createNeedleHolderWithHand() {
+        function createTools() {
+            // GRUPO DO PORTA-AGULHAS
             toolGroup = new THREE.Group();
-            const chromeMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9, roughness: 0.2 });
-
-            // Agulha
-            const needle = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.015, 8, 30, Math.PI * 1.3), chromeMat);
-            needle.rotation.x = Math.PI / 2; needle.rotation.z = Math.PI / 3; needle.position.set(0, -0.35, 0);
+            
+            // Agulha (Toro parcial)
+            const needleGeo = new THREE.TorusGeometry(0.3, 0.02, 8, 20, 4);
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 });
+            const needle = new THREE.Mesh(needleGeo, metalMat);
+            needle.rotation.x = Math.PI/2;
+            needle.position.y = -0.3;
             toolGroup.add(needle);
 
-            // Instrumento
-            const tip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08), chromeMat);
-            toolGroup.add(tip);
-            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3), chromeMat);
-            shaft.position.set(0, 1.5, 0);
-            toolGroup.add(shaft);
+            // Haste do instrumento (Cilindro simples)
+            const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2), metalMat);
+            stick.position.set(0, 1, 0); // Haste para cima
+            toolGroup.add(stick);
 
-            // MÃO DIREITA
-            const handGroup = new THREE.Group();
-            
-            const finger1 = createStylizedFinger(0.12, 0.8);
-            finger1.position.set(0.15, 1.2, 0.1); finger1.rotation.z = -0.3;
-            handGroup.add(finger1);
-            
-            const thumb = createStylizedFinger(0.14, 0.7);
-            thumb.position.set(-0.15, 1.1, 0.2); thumb.rotation.z = 0.3; thumb.rotation.x = 0.4;
-            handGroup.add(thumb);
-             
-            const palm = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), new THREE.MeshStandardMaterial({ color: GLOVE_COLOR, roughness: 0.7 }));
-            palm.position.set(0, 1.8, 0.3);
-            handGroup.add(palm);
-
-            handGroup.position.set(0, 0.2, 0);
-            toolGroup.add(handGroup);
-
-            toolGroup.position.set(0, 5, 0);
-            toolGroup.castShadow = true;
+            toolGroup.position.set(0, 2, 0);
             scene.add(toolGroup);
-        }
 
-        function createScissors() {
+            // GRUPO DA TESOURA
             scissorsGroup = new THREE.Group();
-            const steelMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
-
-            const blade1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 0.02), steelMat);
-            blade1.position.set(0.05, 0, 0); blade1.rotation.z = 0.2;
+            // Lâminas (Caixas)
+            const blade1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.02), metalMat);
+            blade1.position.x = 0.05; blade1.rotation.z = 0.2;
+            const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.02), metalMat);
+            blade2.position.x = -0.05; blade2.rotation.z = -0.2;
+            
             scissorsGroup.add(blade1);
-            
-            const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 0.02), steelMat);
-            blade2.position.set(-0.05, 0, 0); blade2.rotation.z = -0.2;
             scissorsGroup.add(blade2);
-            
-            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2), steelMat);
-            handle.position.set(0, 1.2, 0);
-            scissorsGroup.add(handle);
-
-             // MÃO ESQUERDA
-            const handGroupLeft = new THREE.Group();
-            
-            const fingerL1 = createStylizedFinger(0.12, 0.8);
-            fingerL1.position.set(0.2, 1.8, 0); fingerL1.rotation.z = 0.5; 
-            handGroupLeft.add(fingerL1);
-            
-            const thumbL = createStylizedFinger(0.14, 0.7);
-            thumbL.position.set(-0.2, 1.6, 0.1); thumbL.rotation.z = -0.5; 
-            handGroupLeft.add(thumbL);
-            
-            scissorsGroup.add(handGroupLeft);
-            scissorsGroup.visible = false;
+            scissorsGroup.position.set(0, 2, 0);
+            scissorsGroup.visible = false; // Começa escondida
             scene.add(scissorsGroup);
         }
 
-        // --- LÓGICA ---
+        // --- LÓGICA DE INTERAÇÃO ---
 
-        function updateStatus(text) { statusEl.innerText = text; }
-
-        function onMouseMove(event) {
+        function onMove(e) {
             if(isBusy) return;
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(skinMesh);
-            if (intersects.length > 0) {
-                const p = intersects[0].point;
-                // Move o instrumento
+            const hits = raycaster.intersectObject(skinMesh);
+
+            if(hits.length > 0) {
+                const p = hits[0].point;
+                // Ferramenta segue o mouse flutuando
                 toolGroup.position.set(p.x, p.y + 0.8, p.z);
-                toolGroup.lookAt(p.x, p.y, p.z); 
-                toolGroup.rotation.x -= Math.PI/3; 
+                toolGroup.lookAt(p);
             }
         }
 
-        function onMouseClick(event) {
-            if (event.target.closest('.lil-gui') || event.target.tagName === 'BUTTON' || isBusy) return;
+        function onClick(e) {
+            if(e.target.tagName === 'BUTTON' || e.target.closest('.lil-gui') || isBusy) return;
+
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(skinMesh);
-            if (intersects.length > 0) {
-                const p = intersects[0].point;
-                if (!startPoint) {
-                    startPoint = p;
-                    animateNeedlePuncture(p, true);
-                    updateStatus("Entrada da agulha. Selecione o ponto de saída.");
-                } else {
-                    animateNeedlePuncture(p, false, () => {
-                        startSutureSequence(startPoint, p);
-                    });
-                }
+            const hits = raycaster.intersectObject(skinMesh);
+
+            if(hits.length > 0) {
+                const p = hits[0].point;
+                handleAction(p);
             }
         }
 
-        function animateNeedlePuncture(pos, isEntry, onComplete) {
+        function handleAction(point) {
+            if(!startPoint) {
+                // PRIMEIRO CLIQUE (ENTRADA)
+                startPoint = point;
+                statusEl.innerText = "Ponto de entrada marcado. Clique na saída.";
+                
+                // Animação rápida de "picada"
+                animatePuncture(point);
+                addMarker(point);
+            } else {
+                // SEGUNDO CLIQUE (SAÍDA + NÓ)
+                statusEl.innerText = "Realizando sutura...";
+                addMarker(point);
+                
+                animatePuncture(point, () => {
+                    performSuture(startPoint, point);
+                });
+            }
+        }
+
+        // Animação simples de descer e subir a ferramenta
+        function animatePuncture(pos, callback) {
             isBusy = true;
-            const startY = 0.8; const endY = 0.05; let phase = 0;
-            const anim = setInterval(() => {
-                toolGroup.position.x = pos.x; toolGroup.position.z = pos.z;
-                if (phase === 0) {
+            let down = true;
+            const startY = 0.8;
+            const targetY = 0.1;
+
+            const timer = setInterval(() => {
+                toolGroup.position.x = pos.x; 
+                toolGroup.position.z = pos.z;
+
+                if(down) {
                     toolGroup.position.y -= 0.1 * settings.speed;
-                    toolGroup.rotation.z += 0.15; 
-                    if (toolGroup.position.y <= endY) phase = 1;
+                    if(toolGroup.position.y <= targetY) down = false;
                 } else {
                     toolGroup.position.y += 0.1 * settings.speed;
-                    toolGroup.rotation.z -= 0.15;
-                    if (toolGroup.position.y >= startY) {
-                        clearInterval(anim);
-                        toolGroup.rotation.z = 0;
-                        if(isEntry) isBusy = false;
-                        if(onComplete) onComplete();
+                    if(toolGroup.position.y >= startY) {
+                        clearInterval(timer);
+                        isBusy = false;
+                        if(callback) callback();
                     }
                 }
-            }, 20);
+            }, 16);
         }
 
-        function startSutureSequence(p1, p2) {
+        // --- SEQUÊNCIA DO NÓ ---
+
+        function performSuture(p1, p2) {
             isBusy = true;
-            toolGroup.visible = false; 
-            updateStatus("Realizando a ligadura (nó)...");
+            toolGroup.visible = false; // Esconde agulha
             
-            const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            mid.y += 2.0; 
-            
-            const loopGeo = new THREE.TorusGeometry(0.8, 0.05, 16, 64);
-            const loopMat = new THREE.MeshPhongMaterial({ color: SUTURE_COLOR, shininess: 200, specular: 0x555555 });
-            const loopMesh = new THREE.Mesh(loopGeo, loopMat);
-            loopMesh.position.copy(mid); loopMesh.rotation.x = Math.PI / 2;
-            scene.add(loopMesh);
-            loopMesh.castShadow = true;
+            const center = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+            center.y += 2;
 
+            // 1. Cria o LOOP (Nó aberto)
+            const loopGeo = new THREE.TorusGeometry(0.8, 0.05, 16, 32);
+            const loopMat = new THREE.MeshPhongMaterial({ color: SUTURE_COLOR });
+            const loop = new THREE.Mesh(loopGeo, loopMat);
+            loop.position.copy(center);
+            loop.rotation.x = Math.PI/2;
+            scene.add(loop);
+
+            // 2. Anima o aperto do nó
             let progress = 0;
-            const tightenAnim = setInterval(() => {
-                progress += 0.015 * settings.speed;
-                loopMesh.position.y = THREE.MathUtils.lerp(2.0, 0.1, progress);
-                const scale = THREE.MathUtils.lerp(1.0, 0.05, progress);
-                loopMesh.scale.set(scale, scale, scale);
-                loopMesh.rotation.z += 0.1; 
+            const anim = setInterval(() => {
+                progress += 0.02 * settings.speed;
+                
+                // Nó desce e diminui
+                loop.position.y = THREE.MathUtils.lerp(2, 0.1, progress);
+                loop.scale.setScalar(THREE.MathUtils.lerp(1, 0.1, progress));
 
-                if (progress >= 1) {
-                    clearInterval(tightenAnim);
-                    scene.remove(loopMesh);
-                    finalizeStitch(p1, p2); 
-                    performCutAnimation(mid, p1, p2); 
+                if(progress >= 1) {
+                    clearInterval(anim);
+                    scene.remove(loop);
+                    
+                    // Cria o ponto final fixo
+                    createFinalStitch(p1, p2);
+                    
+                    // Chama a tesoura
+                    animateScissors(center, p1, p2);
                 }
             }, 20);
         }
 
-        function performCutAnimation(centerPos, p1, p2) {
-            updateStatus("Cortando o fio excedente...");
-            scissorsGroup.visible = true; 
-            scissorsGroup.position.set(centerPos.x, 1.5, centerPos.z + 0.5);
-            scissorsGroup.lookAt(centerPos);
+        function createFinalStitch(p1, p2) {
+            // Tubo Curvo (Fio)
+            const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+            mid.y += 0.1;
+            const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+            const tube = new THREE.Mesh(
+                new THREE.TubeGeometry(curve, 8, 0.03, 8, false),
+                new THREE.MeshPhongMaterial({ color: SUTURE_COLOR })
+            );
+            scene.add(tube);
+            stitches.push(tube);
 
-            let cutStep = 0;
-            const cutAnim = setInterval(() => {
-                cutStep += 0.04 * settings.speed;
-                if (cutStep < 0.4) { // Desce
-                    scissorsGroup.position.y -= 0.1 * settings.speed;
-                } else if (cutStep >= 0.4 && cutStep < 0.6) { // Corta
-                    scissorsGroup.children[0].rotation.z = 0.05; 
-                    scissorsGroup.children[1].rotation.z = -0.05;
-                } else { // Sobe
-                    scissorsGroup.position.y += 0.15 * settings.speed;
-                    if (scissorsGroup.position.y > 3) {
-                        clearInterval(cutAnim);
+            // Bolinha (Nó)
+            const knot = new THREE.Mesh(
+                new THREE.SphereGeometry(0.06),
+                new THREE.MeshPhongMaterial({ color: SUTURE_COLOR })
+            );
+            knot.position.copy(mid);
+            scene.add(knot);
+            stitches.push(knot);
+        }
+
+        function animateScissors(pos, p1, p2) {
+            statusEl.innerText = "Cortando fio...";
+            scissorsGroup.visible = true;
+            scissorsGroup.position.set(pos.x, 1.5, pos.z);
+
+            let step = 0;
+            const anim = setInterval(() => {
+                step += 0.05 * settings.speed;
+                
+                if(step < 0.5) {
+                    // Desce
+                    scissorsGroup.position.y -= 0.1;
+                } else if (step < 1.0) {
+                    // Corta (Gira lâminas)
+                    scissorsGroup.children[0].rotation.z = 0;
+                    scissorsGroup.children[1].rotation.z = 0;
+                } else {
+                    // Sobe e termina
+                    scissorsGroup.position.y += 0.1;
+                    if(scissorsGroup.position.y > 2) {
+                        clearInterval(anim);
                         scissorsGroup.visible = false;
-                        scissorsGroup.children[0].rotation.z = 0.2; 
+                        // Reseta tesoura
+                        scissorsGroup.children[0].rotation.z = 0.2;
                         scissorsGroup.children[1].rotation.z = -0.2;
                         
-                        toolGroup.visible = true;
-                        isBusy = false; startPoint = null; stitchCount++;
-                        updateStatus("Ponto finalizado. Procedimento concluído.");
-                        performSkinDeformation(p1, p2); 
+                        finishTurn(p1, p2);
                     }
                 }
-            }, 20);
+            }, 30);
         }
 
-        function finalizeStitch(p1, p2) {
-            const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            mid.y += 0.08; 
-            const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+        function finishTurn(p1, p2) {
+            toolGroup.visible = true;
+            startPoint = null;
+            isBusy = false;
+            statusEl.innerText = "Sutura concluída. Próximo ponto.";
             
-            const threadMat = new THREE.MeshPhongMaterial({ color: SUTURE_COLOR, shininess: 150 });
-            const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.04, 8, false), threadMat);
-            tube.castShadow = true; scene.add(tube); stitchesObjects.push(tube);
-
-            const knot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), threadMat);
-            knot.position.copy(mid); knot.position.y += 0.02;
-            knot.castShadow = true; scene.add(knot); stitchesObjects.push(knot);
+            // Deforma a pele (Aproximação)
+            deformSkin(p1, p2);
         }
 
-        function performSkinDeformation(p1, p2) {
-            const positions = skinMesh.geometry.attributes.position.array;
+        function deformSkin(p1, p2) {
+            const posAttr = skinMesh.geometry.attributes.position;
+            const verts = posAttr.array;
+            
+            // Puxa vértices próximos
             skinMesh.updateMatrixWorld();
-            [p1, p2].forEach(stitchPoint => {
-                let localPoint = stitchPoint.clone(); skinMesh.worldToLocal(localPoint);
-                const side = localPoint.x < 0 ? 'left' : 'right';
-                for (let i = 0; i < positions.length / 3; i++) {
-                    const ix = i*3, iy = i*3+1, iz = i*3+2;
-                    let vX = positions[ix], vY = positions[iy];
-                    const dist = Math.sqrt(Math.pow(vX - localPoint.x, 2) + Math.pow(vY - localPoint.y, 2));
-                    if (dist < 1.0) {
-                        const move = Math.pow(1.0 - (dist/1.0), 3) * 0.65;
-                        if (side === 'left' && vX < 0) positions[ix] = Math.min(-0.01, vX + move);
-                        else if (side === 'right' && vX > 0) positions[ix] = Math.max(0.01, vX - move);
-                        positions[iz] += move * 0.25; 
+            [p1, p2].forEach(p => {
+                // Converte posição mundial do clique para local da pele
+                const localP = p.clone();
+                skinMesh.worldToLocal(localP);
+                
+                for(let i=0; i < verts.length; i+=3) {
+                    const dx = verts[i] - localP.x;
+                    const dy = verts[i+1] - localP.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if(dist < 1.0) {
+                        // Move vertices em direção ao centro X=0
+                        const force = (1.0 - dist) * 0.05;
+                        if(verts[i] < 0) verts[i] += force; // Esquerda vai pra direita
+                        if(verts[i] > 0) verts[i] -= force; // Direita vai pra esquerda
+                        verts[i+2] += force * 0.5; // Levanta um pouco (Z no local = Y no mundo)
                     }
                 }
             });
-            skinMesh.geometry.attributes.position.needsUpdate = true; skinMesh.geometry.computeVertexNormals();
+            posAttr.needsUpdate = true;
+            skinMesh.geometry.computeVertexNormals();
         }
 
-        function initGUI() {
-            gui = new lil.GUI({ container: document.getElementById('gui-container'), title: 'Ajustes' });
-            gui.add(settings, 'offsetX', -0.5, 0.5, 0.001).name('Posição X').onChange(v => { 
-                if(colorTexture) colorTexture.offset.x = v; 
-                if(normalTexture) normalTexture.offset.x = v; 
-            });
-            gui.add(settings, 'offsetY', -0.5, 0.5, 0.001).name('Posição Y').onChange(v => { 
-                if(colorTexture) colorTexture.offset.y = v; 
-                if(normalTexture) normalTexture.offset.y = v; 
-            });
-            gui.add(settings, 'zoomLevel', 8, 20, 0.5).name('Zoom').onChange(updateCameraPosition);
-            gui.add(settings, 'speed', 0.3, 2.0, 0.1).name('Velocidade Demo');
+        function addMarker(p) {
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(0.02), 
+                new THREE.MeshBasicMaterial({color: 0x000000})
+            );
+            m.position.copy(p);
+            scene.add(m);
+            stitches.push(m);
         }
 
-        function updateCameraPosition() { camera.position.set(0, settings.zoomLevel, settings.zoomLevel * 0.4); camera.lookAt(0, 0, 0); }
-        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
-        function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
-        
-        function resetSimulation() { location.reload(); }
+        function setupGUI(tex1, tex2) {
+            const gui = new lil.GUI({ container: document.getElementById('gui-container') });
+            gui.add(settings, 'offsetX', -0.5, 0.5).onChange(v => {
+                if(tex1) tex1.offset.x = v;
+                if(tex2) tex2.offset.x = v;
+            });
+            gui.add(settings, 'offsetY', -0.5, 0.5).onChange(v => {
+                if(tex1) tex1.offset.y = v;
+                if(tex2) tex2.offset.y = v;
+            });
+            gui.add(settings, 'zoom', 5, 20).onChange(v => {
+                camera.position.set(0, v, v * 0.4);
+                camera.lookAt(0,0,0);
+            });
+            gui.add(settings, 'speed', 0.1, 2.0).name('Velocidade');
+        }
+
+        function resetApp() {
+            location.reload();
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
     </script>
 </body>
 </html>
