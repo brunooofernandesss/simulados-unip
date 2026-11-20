@@ -1,231 +1,188 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dual YouTube Player</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            background-color: #f4f4f4;
-            color: #333;
-        }
-        #player-container {
-            display: flex;
-            flex: 1;
-            flex-direction: row;
-            overflow: hidden;
-            position: relative;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .player-wrapper {
-            flex: 1;
-            margin: 0;
-            transition: left 0.5s ease-in-out;
-            position: absolute;
-            top: 20px;
-            height: calc(100% - 40px);
-            width: calc(50% - 20px);
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
-        }
-        .player-wrapper:first-child {
-            left: 20px;
-            z-index: 1;
-        }
-        .player-wrapper:last-child {
-            left: calc(50% + 20px);
-            z-index: 0;
-        }
-        .player-wrapper iframe {
-            width: 100%;
-            height: 100%;
-            border-radius: 8px;
-        }
-        #controls {
-            padding: 20px;
-            background-color: #333;
-            color: white;
-            text-align: center;
-        }
-        #video-url {
-            padding: 10px;
-            width: 300px;
-            margin-right: 15px;
-            border: 1px solid #555;
-            border-radius: 5px;
-            background-color: #444;
-            color: white;
-            font-size: 16px;
-        }
-        #video-url::placeholder {
-            color: #888;
-        }
-        button {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            background-color: #5cb85c;
-            color: white;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-        }
-        button:hover {
-            background-color: #4cae4c;
-        }
-        .speed-meter {
-            display: inline-block;
-            margin: 15px 20px;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        #controls > div {
-            margin-top: 10px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Duelo na Floresta: Herói vs Siren Head</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-    <div id="player-container">
-        <div id="player1-wrapper" class="player-wrapper">
-            <div id="player1"></div>
+  <div class="game-shell">
+    <!-- Top Utility Bar -->
+    <header class="top-bar">
+      <div class="brand-title">
+        <span class="badge-arcade">ARCADE</span>
+        <h1>Duelo na Floresta <span class="vs-accent">VS</span> Siren Head</h1>
+      </div>
+      <div class="top-actions">
+        <button id="btnPause" class="icon-btn" type="button" title="Pausar (P)">⏸ Pausar</button>
+        <button id="btnSound" class="icon-btn" type="button" title="Ativar/Desativar Som">🔊 Som</button>
+        <button id="btnRestart" class="icon-btn" type="button" title="Reiniciar Luta">↻ Reiniciar</button>
+      </div>
+    </header>
+
+    <!-- Main Arena Wrapper -->
+    <main class="arena-wrapper">
+      <!-- Arcade HUD Overlay -->
+      <div class="hud" aria-label="Placar da luta">
+        <!-- Player 1 (Boy) -->
+        <div class="fighter-hud p1">
+          <div class="avatar-frame p1-frame">
+            <img id="p1Avatar" src="assets/hero_avatar.png" alt="Retrato do Herói" />
+          </div>
+          <div class="bars-col">
+            <div class="name-row">
+              <span class="fighter-name">HERÓI</span>
+              <div class="round-dots" id="p1Rounds" aria-label="Rounds vencidos pelo Herói">
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+            </div>
+            <div class="hp-track">
+              <div class="hp-trail" id="p1HpTrail"></div>
+              <div class="hp-fill p1-hp" id="p1HpFill"></div>
+              <span class="hp-text" id="p1HpText">100 / 100</span>
+            </div>
+            <div class="sp-row">
+              <span class="sp-label">ESPECIAL</span>
+              <div class="sp-track">
+                <div class="sp-fill" id="p1SpFill"></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="player2-wrapper" class="player-wrapper">
-            <div id="player2"></div>
+
+        <!-- Center Timer & Round -->
+        <div class="center-hud">
+          <div class="round-tag" id="roundTag">ROUND 1</div>
+          <div class="timer-box" id="timerBox">60</div>
         </div>
-    </div>
-    <div id="controls">
-        <input type="text" id="video-url" placeholder="Insira o link do YouTube para o segundo vídeo">
-        <button onclick="loadSecondVideo()">Carregar Vídeo</button>
-        <div>
-            <span class="speed-meter">Player 1 Speed: <span id="speed1">1.0</span>x</span>
-            <span class="speed-meter">Player 2 Speed: <span id="speed2">1.0</span>x</span>
+
+        <!-- Player 2 (Siren Head) -->
+        <div class="fighter-hud p2">
+          <div class="bars-col">
+            <div class="name-row">
+              <div class="round-dots" id="p2Rounds" aria-label="Rounds vencidos pelo Siren Head">
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+              <span class="fighter-name">SIREN HEAD</span>
+            </div>
+            <div class="hp-track">
+              <div class="hp-trail" id="p2HpTrail"></div>
+              <div class="hp-fill p2-hp" id="p2HpFill"></div>
+              <span class="hp-text" id="p2HpText">100 / 100</span>
+            </div>
+            <div class="sp-row">
+              <div class="sp-track">
+                <div class="sp-fill p2-sp" id="p2SpFill"></div>
+              </div>
+              <span class="sp-label">SÔNICO</span>
+            </div>
+          </div>
+          <div class="avatar-frame p2-frame">
+            <img id="p2Avatar" src="assets/siren_avatar.png" alt="Retrato do Siren Head" />
+          </div>
         </div>
-    </div>
+      </div>
 
-    <script src="https://www.youtube.com/iframe_api"></script>
-    <script>
-        let player1, player2;
-        let currentVideo1Id = 'r-mUL66HUVI';
-        let currentVideo2Id = 'dQw4w9WgXcQ';
-        let isPlayer1OnLeft = true;
-        let player1Time = 0;
-        let player2Time = 0;
-        let switchInterval;
-        const leftPosition = '20px';
-        const rightPosition = 'calc(50% + 20px)';
-        let playersReadyCount = 0;
-        let canStartSwitching = false;
+      <!-- Canvas Stage -->
+      <div class="canvas-stage" id="canvasStage">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
 
-        function onYouTubeIframeAPIReady() {
-            player1 = new YT.Player('player1', {
-                height: '100%',
-                width: '100%',
-                videoId: currentVideo1Id,
-                playerVars: { 'playsinline': 1, 'mute': 0 }, // Removido autoplay do player 1
-                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange1 }
-            });
+        <!-- Round / KO Center Banner -->
+        <div id="bannerOverlay" class="banner-overlay hidden" aria-live="polite">
+          <div id="bannerText" class="banner-text">ROUND 1</div>
+          <div id="bannerSub" class="banner-sub">PREPARE-SE!</div>
+        </div>
 
-            player2 = new YT.Player('player2', {
-                height: '100%',
-                width: '100%',
-                videoId: currentVideo2Id,
-                playerVars: { 'playsinline': 1, 'autoplay': 1, 'mute': 0 },
-                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange2 }
-            });
-        }
+        <!-- Start / Difficulty Overlay -->
+        <div id="menuOverlay" class="modal-overlay">
+          <div class="modal-card">
+            <div class="vs-preview">
+              <div class="preview-fighter">
+                <img src="assets/hero_avatar.png" alt="Herói" class="preview-img p1-glow" />
+                <span>HERÓI</span>
+              </div>
+              <div class="vs-emblem">VS</div>
+              <div class="preview-fighter">
+                <img src="assets/siren_avatar.png" alt="Siren Head" class="preview-img p2-glow" />
+                <span>SIREN HEAD</span>
+              </div>
+            </div>
+            <h2 class="modal-title">Duelo na Floresta</h2>
+            <p class="modal-desc">Vença 2 rounds para derrotar o Siren Head! Use socos, super golpes, bloqueio e o especial quando a barra dourada encher.</p>
 
-        function onPlayerReady(event) {
-            playersReadyCount++;
-            if (playersReadyCount === 2) {
-                canStartSwitching = true;
-                updateSpeedMeters();
-            }
-        }
+            <div class="diff-group" role="group" aria-label="Dificuldade">
+              <button class="diff-btn" data-diff="easy" type="button">Fácil</button>
+              <button class="diff-btn active" data-diff="normal" type="button">Normal</button>
+              <button class="diff-btn" data-diff="hard" type="button">Difícil</button>
+            </div>
 
-        function onPlayerStateChange1(event) {
-            if (event.data === YT.PlayerState.PLAYING && !player1.timeUpdateInterval) {
-                player1.timeUpdateInterval = setInterval(() => {
-                    if (player1.getPlayerState() === YT.PlayerState.PLAYING) { player1Time = player1.getCurrentTime(); }
-                }, 1000);
-            } else if (event.data === YT.PlayerState.PAUSED) { clearInterval(player1.timeUpdateInterval); player1.timeUpdateInterval = null; }
-        }
+            <button id="btnStartGame" class="btn-primary-fight" type="button">⚡ COMEÇAR LUTA!</button>
 
-        function onPlayerStateChange2(event) {
-            if (event.data === YT.PlayerState.PLAYING && !player2.timeUpdateInterval) {
-                player2.timeUpdateInterval = setInterval(() => {
-                    if (player2.getPlayerState() === YT.PlayerState.PLAYING) { player2Time = player2.getCurrentTime(); }
-                }, 1000);
-            } else if (event.data === YT.PlayerState.PAUSED) { clearInterval(player2.timeUpdateInterval); player2.timeUpdateInterval = null; }
-        }
+            <div class="controls-legend">
+              <span><strong>A / D</strong> ou <strong>← / →</strong> Mover</span>
+              <span><strong>W</strong> ou <strong>↑</strong> Pular</span>
+              <span><strong>S</strong> ou <strong>↓</strong> Defender</span>
+              <span><strong>J / Z</strong> Soco</span>
+              <span><strong>K / X</strong> Super Golpe</span>
+              <span><strong>L / C</strong> Especial</span>
+            </div>
+          </div>
+        </div>
 
-        function updateSpeedMeters() {
-            setInterval(() => {
-                if (player1 && player1.getPlaybackRate) { document.getElementById('speed1').textContent = player1.getPlaybackRate().toFixed(1); }
-                if (player2 && player2.getPlaybackRate) { document.getElementById('speed2').textContent = player2.getPlaybackRate().toFixed(1); }
-            }, 1000);
-        }
+        <!-- Pause Overlay -->
+        <div id="pauseOverlay" class="modal-overlay hidden">
+          <div class="modal-card compact">
+            <h2 class="modal-title">Jogo Pausado</h2>
+            <div class="modal-btn-row">
+              <button id="btnResume" class="btn-primary-fight" type="button">▶ Continuar</button>
+              <button id="btnBackMenu" class="btn-secondary" type="button">Menu Principal</button>
+            </div>
+          </div>
+        </div>
 
-        function swapVideos() {
-            const player1Wrapper = document.getElementById('player1-wrapper');
-            const player2Wrapper = document.getElementById('player2-wrapper');
+        <!-- End Match Overlay -->
+        <div id="resultOverlay" class="modal-overlay hidden">
+          <div class="modal-card compact">
+            <div id="resultBadge" class="result-badge">🏆 VITÓRIA!</div>
+            <h2 id="resultTitle" class="modal-title">Você derrotou o Siren Head!</h2>
+            <p id="resultStats" class="modal-desc">Combo máximo: 0 · Golpes acertados: 0</p>
+            <div class="modal-btn-row">
+              <button id="btnPlayAgain" class="btn-primary-fight" type="button">⚡ Jogar Novamente</button>
+              <button id="btnResultMenu" class="btn-secondary" type="button">Trocar Dificuldade</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            if (isPlayer1OnLeft) {
-                player1Wrapper.style.left = rightPosition;
-                player2Wrapper.style.left = leftPosition;
-            } else {
-                player1Wrapper.style.left = leftPosition;
-                player2Wrapper.style.left = rightPosition;
-            }
+      <!-- On-screen Touch & Click Controls -->
+      <section class="touch-controls" aria-label="Controles na tela">
+        <div class="ctrl-group move-group">
+          <button class="ctrl-btn" data-action="left" type="button">◀</button>
+          <button class="ctrl-btn" data-action="right" type="button">▶</button>
+          <button class="ctrl-btn jump-btn" data-action="jump" type="button">▲ Pular</button>
+          <button class="ctrl-btn block-btn" data-action="block" type="button">🛡 Defender</button>
+        </div>
+        <div class="ctrl-group attack-group">
+          <button class="ctrl-btn punch-btn" data-action="punch" type="button">👊 Soco <small>(J)</small></button>
+          <button class="ctrl-btn heavy-btn" data-action="heavy" type="button">💥 Super <small>(K)</small></button>
+          <button class="ctrl-btn special-btn" id="touchSpecial" data-action="special" type="button">⚡ Especial <small>(L)</small></button>
+        </div>
+      </section>
+    </main>
+  </div>
 
-            isPlayer1OnLeft = !isPlayer1OnLeft;
+  <!-- Hidden asset references for modular loading -->
+  <div id="assetManifest"
+       data-hero-idle="assets/hero_idle.png"
+       data-hero-attack="assets/hero_attack.png"
+       data-siren-idle="assets/siren_idle.png"
+       data-siren-attack="assets/siren_attack.png"
+       data-arena-bg="assets/arena_bg.jpg"
+       hidden></div>
 
-            player1Wrapper.style.zIndex = isPlayer1OnLeft ? '1' : '0';
-            player2Wrapper.style.zIndex = isPlayer1OnLeft ? '0' : '1';
-        }
-
-        function startVideoSwitching() {
-            clearInterval(switchInterval);
-            switchInterval = setInterval(swapVideos, 15000);
-        }
-
-        function startSpeedSwitching() {
-            setInterval(() => { if (player1 && player1.setPlaybackRate) { player1.setPlaybackRate(Math.random() < 0.5 ? 1 : 2); } }, 10000);
-            setInterval(() => { if (player2 && player2.setPlaybackRate) { player2.setPlaybackRate(Math.random() < 0.5 ? 1 : 2); } }, 10000);
-        }
-
-        function loadSecondVideo() {
-            const url = document.getElementById('video-url').value.trim();
-            const videoId = extractVideoId(url);
-            if (videoId) {
-                currentVideo2Id = videoId;
-                if (player2 && player2.loadVideoById) {
-                    player2.loadVideoById({ videoId: videoId, startSeconds: 0 });
-                    player2Time = 0;
-                    if (player1 && player1.playVideo) {
-                        player1.playVideo(); // Inicia a reprodução do player 1
-                    }
-                    if (canStartSwitching) {
-                        startVideoSwitching();
-                        startSpeedSwitching();
-                    }
-                }
-                document.getElementById('video-url').value = '';
-            } else { alert('Link do YouTube inválido. Use um formato como https://www.youtube.com/watch?v=VIDEO_ID ou https://youtu.be/VIDEO_ID'); }
-        }
-
-        function extractVideoId(url) {
-            const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-            const match = url.match(regExp);
-            return match ? match[1] : null;
-        }
-    </script>
+  <script src="js/game.js"></script>
 </body>
 </html>
